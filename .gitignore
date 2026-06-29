@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+chroma_data/
+.DS_Store
+dist/
+.vite/
+*.db
