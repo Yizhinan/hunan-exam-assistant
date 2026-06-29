@@ -14,7 +14,7 @@ const CATEGORIES = [
 
 export default function FormPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [cities, setCities] = useState<CityItem[]>([]);
   const [years, setYears] = useState<YearItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,8 +96,7 @@ export default function FormPage() {
           params.set(k, String(v));
         }
       });
-      setSearchParams(params, { replace: true });
-      navigate("/analysis/result", { state: result });
+      navigate(`/analysis/result?${params.toString()}`, { state: result });
     } catch (err) {
       console.error(err);
     } finally {
