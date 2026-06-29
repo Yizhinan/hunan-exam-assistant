@@ -335,3 +335,82 @@ async def list_years(db: Session = Depends(get_db)):
         .where(PositionHistory.is_active == True)
         .group_by(PositionHistory.year).order_by(PositionHistory.year.desc())).all()
     return [{"year":r[0],"count":r[1]} for r in result]
+
+
+@router.get("/trend/{city}")
+async def get_city_trend(
+    city: str,
+    category: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Get historical score trend for a city, optionally filtered by exam category."""
+    query = select(
+        PositionHistory.year,
+        func.avg(PositionHistory.min_score_interview),
+        func.count(PositionHistory.id),
+    ).where(
+        PositionHistory.city == city,
+        PositionHistory.is_active == True,
+        PositionHistory.min_score_interview.isnot(None),
+    )
+    if category:
+        query = query.where(PositionHistory.exam_category == category)
+
+    query = query.group_by(PositionHistory.year).order_by(PositionHistory.year)
+
+    rows = db.execute(query).all()
+    data = [
+        {"year": row[0], "avg_score": round(float(row[1]), 1), "count": row[2]}
+        for row in rows
+    ]
+
+    return {"city": city, "category": category, "data": data}
+
+
+@router.get("/stats/overview")
+async def get_stats_overview(db: Session = Depends(get_db)):
+    """Get aggregate statistics for all positions."""
+    # By city
+    city_rows = db.execute(
+        select(
+            PositionHistory.city,
+            func.avg(PositionHistory.min_score_interview),
+            func.count(PositionHistory.id),
+        ).where(
+            PositionHistory.is_active == True,
+            PositionHistory.min_score_interview.isnot(None),
+        ).group_by(PositionHistory.city).order_by(PositionHistory.city)
+    ).all()
+
+    by_city = [
+        {"city": row[0], "avg_score": round(float(row[1]), 1), "count": row[2]}
+        for row in city_rows
+    ]
+
+    # By category
+    cat_rows = db.execute(
+        select(
+            PositionHistory.exam_category,
+            func.avg(PositionHistory.min_score_interview),
+            func.count(PositionHistory.id),
+        ).where(
+            PositionHistory.is_active == True,
+            PositionHistory.min_score_interview.isnot(None),
+        ).group_by(PositionHistory.exam_category).order_by(PositionHistory.exam_category)
+    ).all()
+
+    by_category = [
+        {"category": row[0], "avg_score": round(float(row[1]), 1), "count": row[2]}
+        for row in cat_rows
+    ]
+
+    # Easiest city and category
+    easiest_city = min(by_city, key=lambda x: x["avg_score"])["city"] if by_city else ""
+    easiest_category = min(by_category, key=lambda x: x["avg_score"])["category"] if by_category else ""
+
+    return {
+        "by_city": by_city,
+        "by_category": by_category,
+        "easiest_city": easiest_city,
+        "easiest_category": easiest_category,
+    }
