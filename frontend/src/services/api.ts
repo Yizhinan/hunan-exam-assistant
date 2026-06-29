@@ -289,6 +289,14 @@ export interface ProfileRequest {
   year?: number;
 }
 
+export interface DifficultyBreakdown {
+  admission_score: number;
+  competition_ratio: number;
+  enrollment_scale: number;
+  trend_adjustment: number;
+  total: number;
+}
+
 export interface PositionOut {
   id: string;
   year: number;
@@ -316,6 +324,9 @@ export interface PositionOut {
   match_details: string[];
   risk_level: string;
   predicted_score: number | null;
+  difficulty_score: number;
+  difficulty_breakdown: DifficultyBreakdown;
+  tier: string;
 }
 
 export interface AnalysisResult {
@@ -329,11 +340,39 @@ export interface AnalysisResult {
 export interface CityItem { code: string; label: string; count: number; }
 export interface YearItem { year: number; count: number; }
 
+export interface TrendDataPoint {
+  year: number;
+  avg_score: number;
+  count: number;
+}
+
+export interface CityTrend {
+  city: string;
+  category: string | null;
+  data: TrendDataPoint[];
+}
+
+export interface StatsByItem {
+  city?: string;
+  category?: string;
+  avg_score: number;
+  count: number;
+}
+
+export interface StatsOverview {
+  by_city: StatsByItem[];
+  by_category: StatsByItem[];
+  easiest_city: string;
+  easiest_category: string;
+}
+
 export const analysisApi = {
   recommend: (data: ProfileRequest) => api.post<AnalysisResult>("/analysis/recommend", data),
   getProfile: () => api.get<{ exists: boolean } & ProfileRequest>("/analysis/profile"),
   getCities: (year?: number) => api.get<CityItem[]>(`/analysis/cities${year ? `?year=${year}` : ""}`),
   getYears: () => api.get<YearItem[]>("/analysis/years"),
-  getCityTrend: (city: string, category?: string) =>
-    api.get(`/analysis/trend/${city}${category ? `?category=${category}` : ""}`),
+  getTrend: (city: string, category?: string) =>
+    api.get<CityTrend>(`/analysis/trend/${city}${category ? `?category=${encodeURIComponent(category)}` : ""}`),
+  getStats: () =>
+    api.get<StatsOverview>("/analysis/stats/overview"),
 };
