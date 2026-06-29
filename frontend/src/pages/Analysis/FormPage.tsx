@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, User, MapPin, GraduationCap, Briefcase, ArrowRight, Loader2, Calendar } from "lucide-react";
 import { analysisApi, type ProfileRequest, type CityItem, type YearItem } from "../../services/api";
 
@@ -14,6 +14,7 @@ const CATEGORIES = [
 
 export default function FormPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [cities, setCities] = useState<CityItem[]>([]);
   const [years, setYears] = useState<YearItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,26 @@ export default function FormPage() {
     }).catch(() => {});
   }, []);
 
+  // Restore from URL params if present
+  useEffect(() => {
+    if (searchParams.toString()) {
+      const restored: Partial<ProfileRequest> = {};
+      const strKeys = ["gender","education","degree","major","political_status","preferred_cities","preferred_category"];
+      const numKeys = ["birth_year","work_experience_years","year"];
+      strKeys.forEach(k => {
+        const v = searchParams.get(k);
+        if (v) (restored as any)[k] = v;
+      });
+      numKeys.forEach(k => {
+        const v = searchParams.get(k);
+        if (v) (restored as any)[k] = parseInt(v);
+      });
+      if (Object.keys(restored).length > 0) {
+        setForm(prev => ({ ...prev, ...restored }));
+      }
+    }
+  }, []);
+
   const update = (k: keyof ProfileRequest, v: any) => setForm({ ...form, [k]: v });
 
   const toggleCity = (code: string) => {
@@ -68,6 +89,14 @@ export default function FormPage() {
     setLoading(true);
     try {
       const result = await analysisApi.recommend(form);
+      // Persist form params to URL
+      const params = new URLSearchParams();
+      Object.entries(form).forEach(([k, v]) => {
+        if (v !== null && v !== undefined && v !== "") {
+          params.set(k, String(v));
+        }
+      });
+      setSearchParams(params, { replace: true });
       navigate("/analysis/result", { state: result });
     } catch (err) {
       console.error(err);
