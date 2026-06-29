@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.services.difficulty import compute_batch_difficulties
 from app.core.security import decode_token
 from app.models.position import PositionHistory, UserProfile
 
@@ -44,6 +45,9 @@ class PositionOut(BaseModel):
     avg_score_interview: float | None; interview_ratio: str
     match_score: int; match_details: list[str]; risk_level: str
     predicted_score: float | None
+    difficulty_score: float  # 0-100, 越低越容易
+    difficulty_breakdown: dict  # {admission_score, competition_ratio, enrollment_scale, trend_adjustment, total}
+    tier: str  # 保底 / 稳妥 / 冲刺
 
 class AnalysisResult(BaseModel):
     profile: ProfileRequest; total_positions: int; matched_positions: int
@@ -166,12 +170,6 @@ async def recommend_positions(
 
         matched.append((pos, score, details))
 
-    # === 排序函数 ===
-    def sort_key(item):
-        pos, score, details = item
-        ms = pos.min_score_interview or 999
-        return (ms, -score)
-
     # === 三级严格筛选 ===
     # Level 1: 城市 AND 类别同时匹配
     level1 = []
@@ -210,7 +208,7 @@ async def recommend_positions(
                 new_d.append(f"📌 省直岗位: {lbl}")
                 new_d.append(f"✅ 类别: {pos.exam_category}")
                 level1_plus.append((pos, min(100, score+bonus+5), new_d))
-        ranked = sorted(level1_plus, key=sort_key)
+        ranked = level1_plus
         filter_msg = "您选的城市暂无进面数据，已自动补充省直岗位"
     elif level1 or (not cities and not cat):
         # 有精确匹配 → 只用 level1
@@ -235,7 +233,18 @@ async def recommend_positions(
             ranked = [(pos, score, list(details)) for pos, score, details in matched]
             filter_msg = "未找到匹配岗位，显示全部"
 
-    ranked.sort(key=sort_key)
+    # === 难度评分与排序 ===
+    candidate_positions = [item[0] for item in ranked]
+    difficulty_map = {}
+    if candidate_positions:
+        diff_results = compute_batch_difficulties(candidate_positions)
+        difficulty_map = {p.id: b for p, b in diff_results}
+        # Re-sort ranked by difficulty total (lower = easier)
+        def diff_sort_key(item):
+            pos, score, details = item
+            d = difficulty_map.get(pos.id)
+            return d.total if d else 50.0
+        ranked.sort(key=diff_sort_key)
 
     # === 构建结果 ===
     recommendations = []
@@ -243,6 +252,22 @@ async def recommend_positions(
         ms = pos.min_score_interview
         predicted = round(ms * 2, 1) if ms and ms < 100 else (ms or None)
         risk = "高" if (predicted or 0) > 140 else "中" if (predicted or 0) > 130 else "低"
+
+        d = difficulty_map.get(pos.id)
+        if d:
+            diff_score = d.total
+            diff_breakdown = {
+                "admission_score": d.admission_score,
+                "competition_ratio": d.competition_ratio,
+                "enrollment_scale": d.enrollment_scale,
+                "trend_adjustment": d.trend_adjustment,
+                "total": d.total,
+            }
+            tier = d.tier
+        else:
+            diff_score = 50.0
+            diff_breakdown = {}
+            tier = "稳妥"
 
         lbl = pos.city_label
         if pos.city == "省直" and pos.district: lbl = f"省直(驻{pos.district})"
@@ -266,13 +291,16 @@ async def recommend_positions(
             interview_ratio=pos.interview_ratio,
             match_score=score, match_details=details,
             risk_level=risk, predicted_score=predicted,
+            difficulty_score=diff_score,
+            difficulty_breakdown=diff_breakdown,
+            tier=tier,
         ))
 
     n_scored = sum(1 for p,_,_ in ranked[:20] if p.min_score_interview is not None)
     summary = (
         f"{req.year}年湖南省考共{total}个岗位，符合条件{len(matched)}个。"
         f"推荐{len(ranked[:20])}个（{filter_msg}）。"
-        f"按进面分从低到高排列。"
+        f"按上岸难度从低到高排列。"
     )
 
     return AnalysisResult(
