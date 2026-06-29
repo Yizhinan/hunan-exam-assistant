@@ -234,10 +234,31 @@ async def recommend_positions(
             filter_msg = "未找到匹配岗位，显示全部"
 
     # === 难度评分与排序 ===
+    # Build trend map: compare each position's score against prior-year same city+department
+    trend_map = {}
     candidate_positions = [item[0] for item in ranked]
+    if candidate_positions:
+        # Group all positions by (city, department) for cross-year comparison
+        from collections import defaultdict
+        by_key = defaultdict(list)
+        for p in all_pos:
+            if p.min_score_interview is not None:
+                by_key[(p.city, p.department)].append((p.year, p.min_score_interview))
+
+        for pos in candidate_positions:
+            key = (pos.city, pos.department)
+            records = by_key.get(key, [])
+            if len(records) >= 2:
+                records.sort(key=lambda x: x[0])  # sort by year
+                # Compute average year-over-year delta (positive = rising, negative = falling)
+                deltas = [records[i+1][1] - records[i][1] for i in range(len(records)-1)]
+                avg_delta = sum(deltas) / len(deltas)
+                # Clamp to -10..10 range
+                trend_map[pos.id] = max(-10.0, min(10.0, avg_delta))
+
     difficulty_map = {}
     if candidate_positions:
-        diff_results = compute_batch_difficulties(candidate_positions)
+        diff_results = compute_batch_difficulties(candidate_positions, trend_map=trend_map)
         difficulty_map = {p.id: b for p, b in diff_results}
         # Re-sort ranked by difficulty total (lower = easier)
         def diff_sort_key(item):
@@ -296,7 +317,6 @@ async def recommend_positions(
             tier=tier,
         ))
 
-    n_scored = sum(1 for p,_,_ in ranked[:20] if p.min_score_interview is not None)
     summary = (
         f"{req.year}年湖南省考共{total}个岗位，符合条件{len(matched)}个。"
         f"推荐{len(ranked[:20])}个（{filter_msg}）。"

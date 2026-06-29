@@ -132,13 +132,8 @@ def compute_difficulty(position, all_positions, trend_data=None) -> DifficultyBr
     )
     total = max(0.0, min(100.0, total))
 
-    # Tier
-    if total <= 35:
-        tier = TIER_RECOMMENDED
-    elif total <= 65:
-        tier = TIER_STABLE
-    else:
-        tier = TIER_REACH
+    # Tier (use public helper)
+    tier = get_tier(total)
 
     return DifficultyBreakdown(
         admission_score=round(admission_factor, 1),
