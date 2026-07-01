@@ -1,15 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, User, MapPin, GraduationCap, Briefcase, ArrowRight, Loader2, Calendar } from "lucide-react";
+import { Search, User, MapPin, GraduationCap, Briefcase, ArrowRight, Loader2, Calendar, Filter } from "lucide-react";
 import { analysisApi, type ProfileRequest, type CityItem, type YearItem } from "../../services/api";
 
 const EDUCATIONS = ["大专", "本科", "硕士研究生", "博士研究生"];
 const DEGREES = ["无", "学士", "硕士", "博士"];
 const POLITICAL = ["群众", "共青团员", "中共党员", "中共党员（含预备党员）"];
-const CATEGORIES = [
-  { value: "省市直", label: "省市直岗" },
-  { value: "行政执法", label: "行政执法岗" },
-  { value: "县乡基层", label: "县乡基层岗" },
+const ORG_CATEGORIES = [
+  { value: "省直机关及直属单位", label: "省直机关" },
+  { value: "市州及以下机关", label: "市州及以下" },
+  { value: "法院系统", label: "法院系统" },
+  { value: "检察院系统", label: "检察院系统" },
+  { value: "公安系统", label: "公安系统" },
+  { value: "综合行政执法队伍", label: "行政执法队伍" },
+];
+
+const ESSAY_CATEGORIES = [
+  { value: "省市卷", label: "省市卷" },
+  { value: "县乡卷", label: "县乡卷" },
+  { value: "行政执法卷", label: "行政执法卷" },
 ];
 
 export default function FormPage() {
@@ -30,6 +39,8 @@ export default function FormPage() {
     work_experience_years: 0,
     preferred_cities: "",
     preferred_category: "",
+    preferred_essay_category: "",
+    exclude_professional_subject: false,
     year: 2026,
   });
 
@@ -49,6 +60,7 @@ export default function FormPage() {
           work_experience_years: p.work_experience_years,
           preferred_cities: p.preferred_cities,
           preferred_category: p.preferred_category,
+          preferred_essay_category: p.preferred_essay_category,
         });
         setSaved(true);
       }
@@ -59,7 +71,7 @@ export default function FormPage() {
   useEffect(() => {
     if (searchParams.toString()) {
       const restored: Partial<ProfileRequest> = {};
-      const strKeys = ["gender","education","degree","major","political_status","preferred_cities","preferred_category"];
+      const strKeys = ["gender","education","degree","major","political_status","preferred_cities","preferred_category","preferred_essay_category"];
       const numKeys = ["birth_year","work_experience_years","year"];
       strKeys.forEach(k => {
         const v = searchParams.get(k);
@@ -230,9 +242,9 @@ export default function FormPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-warm-500 mb-2">意向岗位类别</label>
-          <div className="flex gap-2">
-            {CATEGORIES.map((c) => (
+          <label className="block text-xs font-medium text-warm-500 mb-2">意向岗位类别（组织系统）</label>
+          <div className="flex flex-wrap gap-2">
+            {ORG_CATEGORIES.map((c) => (
               <button key={c.value} onClick={() => update("preferred_category",
                 form.preferred_category === c.value ? "" : c.value)}
                 className={`text-sm px-4 py-2 rounded-xl border transition-all ${
@@ -242,6 +254,38 @@ export default function FormPage() {
                 }`}>{c.label}</button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-warm-500 mb-2">申论类别（考试卷类型）</label>
+          <div className="flex gap-2">
+            {ESSAY_CATEGORIES.map((c) => (
+              <button key={c.value} onClick={() => update("preferred_essay_category",
+                form.preferred_essay_category === c.value ? "" : c.value)}
+                className={`text-sm px-4 py-2 rounded-xl border transition-all ${
+                  form.preferred_essay_category === c.value
+                    ? "bg-accent-500 text-white border-accent-500"
+                    : "bg-white text-warm-600 border-warm-200 hover:border-accent-200"
+                }`}>{c.label}</button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <button
+            onClick={() => update("exclude_professional_subject", !form.exclude_professional_subject)}
+            className={`flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl border transition-all ${
+              form.exclude_professional_subject
+                ? "bg-emerald-50 border-emerald-300 text-emerald-700 font-medium"
+                : "bg-white text-warm-500 border-warm-200 hover:border-emerald-200 hover:text-warm-700"
+            }`}
+          >
+            <Filter className="h-4 w-4" />
+            {form.exclude_professional_subject ? "✅ 仅看行测申论" : "📋 仅看行测申论"}
+          </button>
+          <p className="text-xs text-warm-400 mt-1.5">
+            开启后排除加试公安基础知识、财经专业知识、法律专业科目等岗位
+          </p>
         </div>
       </div>
 

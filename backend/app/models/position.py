@@ -32,6 +32,8 @@ class PositionHistory(Base):
     # Category
     exam_category: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     # 行政执法 / 县乡基层 / 省市直 / 综合通用
+    org_category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    # 组织系统类别（Excel sheet名）：省直机关及直属单位 / 市州及以下机关 / 法院系统 / 检察院系统 / 公安系统 / 综合行政执法队伍
 
     # Requirements
     education_requirement: Mapped[str] = mapped_column(String(20), default="本科及以上")
@@ -122,7 +124,9 @@ class UserProfile(Base):
     preferred_cities: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # 意向城市（逗号分隔）
     preferred_category: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    # 意向岗位类别
+    # 意向岗位类别（现在匹配 org_category）
+    preferred_essay_category: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 意向申论类别：省市卷 / 县乡卷 / 行政执法卷
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

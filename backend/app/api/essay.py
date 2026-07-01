@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -23,6 +22,7 @@ router = APIRouter(
 
 class GradeRequest(BaseModel):
     question: str = Field(..., min_length=10, max_length=5000, description="申论题目")
+    material: str = Field(default="", max_length=20000, description="给定资料/参考材料")
     answer: str = Field(..., min_length=50, max_length=10000, description="考生作答")
     use_rag: bool = Field(default=True, description="是否启用 RAG 增强批改")
 
@@ -54,6 +54,7 @@ class GradingResponse(BaseModel):
 class EssayHistoryItem(BaseModel):
     id: str
     question: str
+    material: str | None = None
     total_score: float | None
     grade: str | None
     status: str
@@ -111,25 +112,27 @@ def _to_grading_response(essay: EssaySubmission) -> GradingResponse:
 async def grade_essay(
     req: GradeRequest,
     user_id: str = Depends(decode_token),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     """提交申论作答进行 AI 批改"""
     essay = EssaySubmission(
         user_id=user_id,
         question=req.question,
+        material=req.material or None,
         answer=req.answer,
         word_count=len(req.answer),
         status="grading",
     )
     db.add(essay)
-    db.commit()
-    db.refresh(essay)
+    await db.commit()
+    await db.refresh(essay)
 
     try:
         engine = get_grading_engine()
         result: GradingResult = engine.grade(
             question=req.question,
             answer=req.answer,
+            material=req.material or "",
             use_rag=req.use_rag,
         )
 
@@ -156,15 +159,15 @@ async def grade_essay(
             "hunan_relevance": result.hunan_relevance,
         }
         essay.status = "completed"
-        db.commit()
-        db.refresh(essay)
+        await db.commit()
+        await db.refresh(essay)
 
         return _to_grading_response(essay)
 
     except Exception as e:
         essay.status = "error"
         essay.error_message = str(e)
-        db.commit()
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批改失败: {str(e)}",
@@ -176,14 +179,15 @@ async def get_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     user_id: str = Depends(decode_token),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     """获取当前用户的批改历史"""
-    total = db.execute(
+    total_result = await db.execute(
         select(func.count(EssaySubmission.id)).where(
             EssaySubmission.user_id == user_id
         )
-    ).scalar() or 0
+    )
+    total = total_result.scalar() or 0
 
     query = (
         select(EssaySubmission)
@@ -192,13 +196,15 @@ async def get_history(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    essays = db.execute(query).scalars().all()
+    essays_result = await db.execute(query)
+    essays = essays_result.scalars().all()
 
     return HistoryResponse(
         items=[
             EssayHistoryItem(
                 id=str(e.id),
                 question=e.question[:100] + "..." if len(e.question) > 100 else e.question,
+                material=e.material[:100] + "..." if e.material and len(e.material) > 100 else e.material,
                 total_score=e.total_score,
                 grade=e.grade,
                 status=e.status,
@@ -216,15 +222,16 @@ async def get_history(
 async def get_essay_result(
     essay_id: str,
     user_id: str = Depends(decode_token),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     """获取单篇批改详情"""
-    essay = db.execute(
+    essay_result = await db.execute(
         select(EssaySubmission).where(
             EssaySubmission.id == essay_id,
             EssaySubmission.user_id == user_id,
         )
-    ).scalar_one_or_none()
+    )
+    essay = essay_result.scalar_one_or_none()
 
     if essay is None:
         raise HTTPException(status_code=404, detail="批改记录不存在")

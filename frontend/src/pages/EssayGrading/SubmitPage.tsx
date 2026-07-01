@@ -6,6 +6,7 @@ import { Send, Loader2, Sparkles, FileText, HelpCircle } from "lucide-react";
 export default function SubmitPage() {
   const navigate = useNavigate();
   const [question, setQuestion] = useState("");
+  const [material, setMaterial] = useState("");
   const [answer, setAnswer] = useState("");
   const [useRag, setUseRag] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,12 @@ export default function SubmitPage() {
     setError("");
     setLoading(true);
     try {
-      const result: GradingResult = await essayApi.grade({ question, answer, use_rag: useRag });
+      const result: GradingResult = await essayApi.grade({
+        question,
+        material: material || undefined,
+        answer,
+        use_rag: useRag,
+      });
       navigate(`/essay/${result.essay_id}`, { state: result });
     } catch (err) {
       setError(err instanceof Error ? err.message : "批改请求失败");
@@ -57,6 +63,23 @@ export default function SubmitPage() {
             minLength={10}
             placeholder="请输入或粘贴申论题目..."
             className="input-field h-24 resize-none"
+          />
+        </div>
+
+        {/* Material */}
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-4 w-4 text-amber-500" />
+            <label className="text-sm font-semibold text-warm-900">
+              给定资料（选填）
+            </label>
+            <span className="text-xs text-warm-400">申论材料是作答的根据，AI 会判断你是否紧扣材料</span>
+          </div>
+          <textarea
+            value={material}
+            onChange={(e) => setMaterial(e.target.value)}
+            placeholder="在此粘贴申论给定资料（参考材料），可选填..."
+            className="input-field h-40 resize-none text-sm leading-relaxed"
           />
         </div>
 

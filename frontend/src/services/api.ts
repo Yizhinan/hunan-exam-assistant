@@ -32,6 +32,12 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
+    // Allow callers to suppress Content-Type (e.g. FormData uploads)
+    if (rest.headers && (rest.headers as Record<string, string>)["Content-Type"] === "") {
+      delete headers["Content-Type"];
+      delete (rest.headers as Record<string, string>)["Content-Type"];
+    }
+
     const token = this.getToken();
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
@@ -41,6 +47,46 @@ class ApiClient {
       ...rest,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (response.status === 401) {
+      this.setToken(null);
+      window.location.href = "/login";
+      throw new Error("认证已过期，请重新登录");
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: "请求失败" }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /** Upload a file with multipart/form-data — browser sets Content-Type with boundary. */
+  async uploadFile<T = unknown>(
+    path: string,
+    file: File,
+    extraFields?: Record<string, string | number>,
+  ): Promise<T> {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (extraFields) {
+      Object.entries(extraFields).forEach(([key, value]) => {
+        formData.append(key, String(value));
+      });
+    }
+
+    const headers: Record<string, string> = {};
+    const token = this.getToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}${path}`, {
+      method: "POST",
+      headers,
+      body: formData,
     });
 
     if (response.status === 401) {
@@ -139,6 +185,7 @@ export interface GradingResult {
 
 export interface GradeRequest {
   question: string;
+  material?: string;
   answer: string;
   use_rag: boolean;
 }
@@ -146,6 +193,7 @@ export interface GradeRequest {
 export interface EssayHistoryItem {
   id: string;
   question: string;
+  material?: string | null;
   total_score: number | null;
   grade: string | null;
   status: string;
@@ -258,6 +306,11 @@ export interface CategoryInfo {
   label: string;
 }
 
+export interface RefreshResponse {
+  started: boolean;
+  message: string;
+}
+
 export const dailyApi = {
   getToday: (category?: string) => {
     const params = category ? `?category=${encodeURIComponent(category)}` : "";
@@ -272,6 +325,7 @@ export const dailyApi = {
   getTopics: () => api.get<TopicItem[]>("/daily/topics"),
   getCategories: () => api.get<CategoryInfo[]>("/daily/categories"),
   getDetail: (id: string) => api.get<DailyEssayOut>(`/daily/${id}`),
+  refresh: (useAi = true) => api.post<RefreshResponse>(`/daily/refresh?use_ai=${useAi}`),
 };
 
 // ---------- Analysis types ----------
@@ -285,7 +339,9 @@ export interface ProfileRequest {
   political_status?: string | null;
   work_experience_years?: number | null;
   preferred_cities?: string | null;
-  preferred_category?: string | null;
+  preferred_category?: string | null;  // now matches org_category (组织系统类别)
+  preferred_essay_category?: string | null;  // 申论类别：省市卷 / 县乡卷 / 行政执法卷
+  exclude_professional_subject?: boolean;
   year?: number;
 }
 
@@ -306,6 +362,7 @@ export interface PositionOut {
   department: string;
   position_name: string;
   exam_category: string;
+  org_category: string | null;  // 组织系统类别
   education_requirement: string;
   degree_requirement: string;
   major_requirement: string | null;
@@ -313,6 +370,7 @@ export interface PositionOut {
   gender_requirement: string;
   experience_requirement: string;
   age_limit: string;
+  exam_subject: string | null;
   enrollment_count: number;
   applicant_count: number | null;
   competition_ratio: number | null;
@@ -366,6 +424,16 @@ export interface StatsOverview {
   easiest_category: string;
 }
 
+export interface ImportResult {
+  success: boolean;
+  total_rows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  not_found: number;
+  errors: Array<{ row?: number; sheet?: string; department?: string; position_name?: string; message: string }>;
+}
+
 export const analysisApi = {
   recommend: (data: ProfileRequest) => api.post<AnalysisResult>("/analysis/recommend", data),
   getProfile: () => api.get<{ exists: boolean } & ProfileRequest>("/analysis/profile"),
@@ -375,4 +443,10 @@ export const analysisApi = {
     api.get<CityTrend>(`/analysis/trend/${city}${category ? `?category=${encodeURIComponent(category)}` : ""}`),
   getStats: () =>
     api.get<StatsOverview>("/analysis/stats/overview"),
+  /** Import position Excel (.xlsx) — multi-sheet supported. */
+  importPositions: (file: File, year: number) =>
+    api.uploadFile<ImportResult>("/analysis/import/positions", file, { year }),
+  /** Import interview score Excel (.xlsx). */
+  importScores: (file: File, year: number) =>
+    api.uploadFile<ImportResult>("/analysis/import/scores", file, { year }),
 };

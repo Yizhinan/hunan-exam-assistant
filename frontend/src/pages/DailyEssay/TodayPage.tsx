@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ExternalLink, Eye, BookOpen } from "lucide-react";
-import { dailyApi, type DailyEssayOut, type TodayResponse } from "../../services/api";
+import { ExternalLink, Eye, BookOpen, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { dailyApi, type DailyEssayOut, type TodayResponse, type RefreshResponse } from "../../services/api";
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   "行政执法": { label: "行政执法岗", color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200" },
@@ -83,6 +83,34 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setToast(null);
+    try {
+      const res: RefreshResponse = await dailyApi.refresh(true);
+      setToast({ type: "success", message: res.message });
+      // Auto-reload after a delay to let background scraping finish
+      setTimeout(() => {
+        dailyApi.getToday(activeCategory || undefined).then(setData).catch(() => {});
+        setRefreshing(false);
+      }, 15000);
+    } catch (err: any) {
+      setToast({ type: "error", message: `刷新失败：${err.message || "网络错误"}` });
+      setRefreshing(false);
+    }
+  };
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (essayId) {
@@ -108,7 +136,25 @@ export default function TodayPage() {
       <div className="max-w-4xl mx-auto text-center py-20">
         <BookOpen className="h-12 w-12 mx-auto mb-4 text-warm-300" />
         <p className="text-warm-500">{error || "暂无范文"}</p>
-        <p className="text-sm text-warm-400 mt-2">运行 python scripts/fetch_daily_essays.py 获取范文</p>
+        <p className="text-sm text-warm-400 mt-2 mb-4">点击下方按钮从人民网、求是网获取最新申论范文</p>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="btn-primary inline-flex items-center gap-2 disabled:opacity-60"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "正在获取范文…" : "🔄 手动刷新获取范文"}
+        </button>
+        {toast && (
+          <div className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm ${
+            toast.type === "success"
+              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+              : "bg-red-50 text-red-800 border border-red-200"
+          }`}>
+            {toast.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+            {toast.message}
+          </div>
+        )}
       </div>
     );
   }
@@ -118,14 +164,41 @@ export default function TodayPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${
+          toast.type === "success"
+            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+            : "bg-red-50 text-red-800 border border-red-200"
+        }`}>
+          {toast.type === "success"
+            ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+            : <AlertCircle className="h-4 w-4 shrink-0" />
+          }
+          <span className="flex-1">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="text-warm-400 hover:text-warm-600">✕</button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-heading">每日范文</h1>
           <p className="page-subtitle">{data.date} · 按岗位类型分类，每日更新</p>
         </div>
-        <Link to="/daily/archive" className="btn-secondary text-sm py-2">
-          历史归档 →
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="btn-secondary text-sm py-2 flex items-center gap-2 disabled:opacity-60"
+            title="从人民网、求是网等公开网站获取最新范文"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "刷新中…" : "手动刷新"}
+          </button>
+          <Link to="/daily/archive" className="btn-secondary text-sm py-2">
+            历史归档 →
+          </Link>
+        </div>
       </div>
 
       {/* Category tabs */}

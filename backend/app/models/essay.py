@@ -22,6 +22,7 @@ class EssaySubmission(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    material: Mapped[str | None] = mapped_column(Text, nullable=True)  # 给定资料/参考材料
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(

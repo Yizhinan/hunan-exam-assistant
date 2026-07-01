@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -24,7 +23,7 @@ async def upload_document(
     title: str = Form(...),
     source_url: str = Form(""),
     source_name: str = Form(""),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Upload a document (PDF / Markdown / TXT) to the knowledge base."""
     if doc_type not in ("exam", "policy", "news", "model"):
@@ -53,8 +52,8 @@ async def upload_document(
         status="ingesting",
     )
     db.add(doc_record)
-    db.commit()
-    db.refresh(doc_record)
+    await db.commit()
+    await db.refresh(doc_record)
 
     try:
         rag = get_rag()
@@ -69,8 +68,8 @@ async def upload_document(
 
         doc_record.chunk_count = chunk_count
         doc_record.status = "ingested"
-        db.commit()
-        db.refresh(doc_record)
+        await db.commit()
+        await db.refresh(doc_record)
 
         return {
             "id": str(doc_record.id),
@@ -82,7 +81,7 @@ async def upload_document(
     except Exception as e:
         doc_record.status = "error"
         doc_record.error_message = str(e)
-        db.commit()
+        await db.commit()
         raise HTTPException(status_code=500, detail=f"向量化存储失败: {str(e)}")
 
 
@@ -112,7 +111,7 @@ async def list_documents(
     doc_type: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Paginated list of uploaded documents."""
     query = select(Document)
@@ -125,8 +124,10 @@ async def list_documents(
     query = query.order_by(Document.created_at.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
 
-    total = db.execute(count_query).scalar() or 0
-    docs = db.execute(query).scalars().all()
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    docs_result = await db.execute(query)
+    docs = docs_result.scalars().all()
 
     return {
         "documents": [
@@ -151,12 +152,13 @@ async def list_documents(
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     doc_id: str,
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Delete a document from the knowledge base."""
-    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    doc_result = await db.execute(select(Document).where(Document.id == doc_id))
+    doc = doc_result.scalar_one_or_none()
     if doc is None:
         raise HTTPException(status_code=404, detail="文档不存在")
 
     db.delete(doc)
-    db.commit()
+    await db.commit()

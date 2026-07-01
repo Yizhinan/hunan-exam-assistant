@@ -38,11 +38,11 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(req: RegisterRequest, db: Session = Depends(get_db)):
+async def register(req: RegisterRequest, db = Depends(get_db)):
     """Register a new user account."""
-    existing = db.execute(
-        select(User).where((User.username == req.username) | (User.email == req.email))
-    ).scalar_one_or_none()
+    stmt = select(User).where((User.username == req.username) | (User.email == req.email))
+    result = await db.execute(stmt)
+    existing = result.scalar_one_or_none()
 
     if existing is not None:
         raise HTTPException(
@@ -57,8 +57,8 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
         display_name=req.display_name or req.username,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     token = create_access_token(sub=str(user.id), username=user.username)
     return TokenResponse(
@@ -69,9 +69,9 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: Session = Depends(get_db)):
+async def login(req: LoginRequest, db = Depends(get_db)):
     """Authenticate and return JWT token."""
-    result = db.execute(select(User).where(User.username == req.username))
+    result = await db.execute(select(User).where(User.username == req.username))
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(req.password, user.hashed_password):
@@ -90,11 +90,12 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get("/me")
 async def get_current_user(
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
     user_id: str = Depends(decode_token),
 ):
     """Return current authenticated user info."""
-    user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return {

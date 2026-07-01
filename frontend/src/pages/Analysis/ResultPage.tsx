@@ -27,16 +27,21 @@ export default function ResultPage() {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // If no result in state, try to reconstruct from URL params
+  // Always fetch fresh data from API on mount (location.state may be stale)
   useEffect(() => {
-    if (!result && searchParams.toString()) {
+    if (searchParams.toString()) {
       setLoading(true);
       const params: Record<string, any> = {};
-      const keys = ["birth_year","gender","education","degree","major","political_status","work_experience_years","preferred_cities","preferred_category","year"];
+      const keys = ["birth_year","gender","education","degree","major","political_status","work_experience_years","preferred_cities","preferred_category","preferred_essay_category","year","exclude_professional_subject"];
       keys.forEach(k => {
         const v = searchParams.get(k);
         if (v) {
-          params[k] = k === "birth_year" || k === "work_experience_years" || k === "year" ? parseInt(v) : v;
+          // exclude_professional_subject 是布尔值，需要特殊处理
+          if (k === "exclude_professional_subject") {
+            params[k] = v === "true";
+          } else {
+            params[k] = k === "birth_year" || k === "work_experience_years" || k === "year" ? parseInt(v) : v;
+          }
         }
       });
       analysisApi.recommend(params)
@@ -44,7 +49,7 @@ export default function ResultPage() {
         .catch(console.error)
         .finally(() => setLoading(false));
     }
-  }, []);
+  }, [searchParams.toString()]);
 
   // Fetch stats on mount
   useEffect(() => {

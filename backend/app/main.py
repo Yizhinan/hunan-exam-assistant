@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, SessionLocal
 from app.api import auth, essay, knowledge, daily, analysis
 
 # Import models so they register with Base.metadata for auto-create
@@ -22,8 +22,17 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
-    # Create tables on startup
-    Base.metadata.create_all(bind=engine)
+    # Apply SQLite schema migrations (new columns for model changes)
+    from app.core.database import _migrate_sqlite
+    _migrate_sqlite()
+    # Create tables on startup — handle both async (PostgreSQL) and sync (SQLite) engines
+    if "sqlite" in settings.DATABASE_URL:
+        # Sync engine (SQLite)
+        with engine.begin() as conn:
+            Base.metadata.create_all(conn)
+    else:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     yield
 
 
