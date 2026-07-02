@@ -27,3 +27,13 @@ class NewsArticleItem(scrapy.Item):
     publish_date = scrapy.Field()
     category = scrapy.Field()        # 政策 / 经济 / 社会 / 生态 etc.
     tags = scrapy.Field()            # list[str]
+
+
+class EssayItem(scrapy.Item):
+    """A model essay / opinion piece for 申论 reference."""
+
+    source_url = scrapy.Field()
+    source_name = scrapy.Field()
+    title = scrapy.Field()
+    content = scrapy.Field()
+    topic = scrapy.Field()           # 乡村振兴 / 基层治理 / 经济发展 etc.

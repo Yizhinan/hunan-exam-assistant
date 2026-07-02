@@ -1,34 +1,43 @@
 import { useRef, useState, type DragEvent } from "react";
-import { UploadCloud, FileSpreadsheet, X, AlertCircle } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, FileText, X, AlertCircle } from "lucide-react";
 
 interface FileUploadZoneProps {
   onFileSelect: (file: File) => void;
   accept?: string;
+  allowedExtensions?: string[];
   disabled?: boolean;
   hint?: string;
+  maxSizeMB?: number;
 }
 
 export default function FileUploadZone({
   onFileSelect,
   accept = ".xlsx,.xlsm",
+  allowedExtensions = ["xlsx", "xlsm"],
   disabled = false,
-  hint = "拖拽 .xlsx 文件到此处，或点击选择",
+  hint = "拖拽文件到此处，或点击选择",
+  maxSizeMB = 20,
 }: FileUploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState("");
 
+  const isExcel = (filename: string) => {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    return ext === "xlsx" || ext === "xlsm";
+  };
+
   const validateAndSet = (file: File) => {
     setError("");
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !["xlsx", "xlsm"].includes(ext)) {
-      setError(`仅支持 .xlsx 格式，收到: .${ext}`);
+    if (!ext || !allowedExtensions.includes(ext)) {
+      setError(`仅支持 ${allowedExtensions.map(e => `.${e}`).join(", ")} 格式，收到: .${ext}`);
       return;
     }
-    const maxSize = 20 * 1024 * 1024; // 20MB
+    const maxSize = maxSizeMB * 1024 * 1024;
     if (file.size > maxSize) {
-      setError(`文件过大（最大 20MB），当前: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+      setError(`文件过大（最大 ${maxSizeMB}MB），当前: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
       return;
     }
     setSelectedFile(file);
@@ -68,6 +77,8 @@ export default function FileUploadZone({
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  const extList = allowedExtensions.map(e => `.${e}`).join(", ");
+
   return (
     <div>
       <div
@@ -96,7 +107,11 @@ export default function FileUploadZone({
 
         {selectedFile ? (
           <div className="flex flex-col items-center gap-2">
-            <FileSpreadsheet className="h-10 w-10 text-emerald-500" />
+            {isExcel(selectedFile.name) ? (
+              <FileSpreadsheet className="h-10 w-10 text-emerald-500" />
+            ) : (
+              <FileText className="h-10 w-10 text-blue-500" />
+            )}
             <span className="text-sm font-medium text-warm-800">{selectedFile.name}</span>
             <span className="text-xs text-warm-400">
               {(selectedFile.size / 1024).toFixed(0)} KB
@@ -119,7 +134,7 @@ export default function FileUploadZone({
             <UploadCloud className={`h-10 w-10 ${dragOver ? "text-brand-500" : "text-warm-300"}`} />
             <div>
               <p className="text-sm text-warm-600">{hint}</p>
-              <p className="text-xs text-warm-400 mt-1">支持 .xlsx 格式，最大 20MB</p>
+              <p className="text-xs text-warm-400 mt-1">支持 {extList} 格式，最大 {maxSizeMB}MB</p>
             </div>
           </div>
         )}

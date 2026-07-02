@@ -22,7 +22,7 @@ router = APIRouter(
 
 class GradeRequest(BaseModel):
     question: str = Field(..., min_length=10, max_length=5000, description="申论题目")
-    material: str = Field(default="", max_length=20000, description="给定资料/参考材料")
+    material: str = Field(..., min_length=1, max_length=20000, description="给定资料/参考材料")
     answer: str = Field(..., min_length=50, max_length=10000, description="考生作答")
     use_rag: bool = Field(default=True, description="是否启用 RAG 增强批改")
 

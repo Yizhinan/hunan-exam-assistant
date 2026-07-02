@@ -34,6 +34,10 @@ class Settings(BaseSettings):
 
     # Embedding
     EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
+    HF_ENDPOINT: str = ""  # HuggingFace 镜像，如 https://hf-mirror.com
+
+    # Pipeline (crawler → backend) auth token
+    PIPELINE_API_TOKEN: str = ""
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

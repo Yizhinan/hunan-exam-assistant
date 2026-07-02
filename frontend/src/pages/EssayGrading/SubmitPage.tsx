@@ -19,7 +19,7 @@ export default function SubmitPage() {
     try {
       const result: GradingResult = await essayApi.grade({
         question,
-        material: material || undefined,
+        material,
         answer,
         use_rag: useRag,
       });
@@ -71,14 +71,15 @@ export default function SubmitPage() {
           <div className="flex items-center gap-2 mb-3">
             <FileText className="h-4 w-4 text-amber-500" />
             <label className="text-sm font-semibold text-warm-900">
-              给定资料（选填）
+              给定资料
             </label>
-            <span className="text-xs text-warm-400">申论材料是作答的根据，AI 会判断你是否紧扣材料</span>
+            <span className="text-xs text-warm-400">小题作答需紧扣材料，大作文重在立意与论证</span>
           </div>
           <textarea
             value={material}
             onChange={(e) => setMaterial(e.target.value)}
-            placeholder="在此粘贴申论给定资料（参考材料），可选填..."
+            required
+            placeholder="在此粘贴申论给定资料..."
             className="input-field h-40 resize-none text-sm leading-relaxed"
           />
         </div>

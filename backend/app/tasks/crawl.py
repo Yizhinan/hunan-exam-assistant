@@ -65,9 +65,29 @@ def crawl_exams():
     return results
 
 
+@celery_app.task(name="app.tasks.crawl.crawl_essays")
+def crawl_essays():
+    """
+    Weekly task: crawl model essays for 申论 reference.
+
+    Runs these spiders:
+      - people_essay: 人民网观点/时评
+      - qstheory_essay: 求是网理论文章
+    """
+    results = {}
+    for spider in ["people_essay", "qstheory_essay"]:
+        try:
+            results[spider] = _run_spider(spider)
+        except Exception as e:
+            results[spider] = {"error": str(e)}
+
+    return results
+
+
 @celery_app.task(name="app.tasks.crawl.crawl_all")
 def crawl_all():
     """Run all crawlers (manual trigger)."""
     news_result = crawl_news()
     exam_result = crawl_exams()
-    return {"news": news_result, "exams": exam_result}
+    essay_result = crawl_essays()
+    return {"news": news_result, "exams": exam_result, "essays": essay_result}

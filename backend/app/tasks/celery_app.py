@@ -27,5 +27,9 @@ celery_app.conf.update(
             "task": "app.tasks.crawl.crawl_exams",
             "schedule": 604800.0,  # weekly
         },
+        "crawl-essays-weekly": {
+            "task": "app.tasks.crawl.crawl_essays",
+            "schedule": 604800.0,  # weekly
+        },
     },
 )

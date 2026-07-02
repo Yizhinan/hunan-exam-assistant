@@ -1,10 +1,24 @@
 import { useState, useEffect } from "react";
 import { knowledgeApi, analysisApi, type DocumentItem, type ImportResult } from "../../services/api";
-import { Database, Search, FileText, RefreshCw, HardDrive, Upload, Download, Brain } from "lucide-react";
+import { Database, Search, FileText, RefreshCw, HardDrive, Upload, Download, Brain, UploadCloud } from "lucide-react";
 import FileUploadZone from "../../components/admin/FileUploadZone";
 import ImportResultPanel from "../../components/admin/ImportResultPanel";
 
 type AdminTab = "knowledge" | "import";
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  exam: "真题",
+  policy: "政策",
+  news: "时政",
+  model: "范文",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  ingested: "已入库",
+  ingesting: "处理中",
+  error: "失败",
+  pending: "待处理",
+};
 
 export default function Dashboard() {
   const [tab, setTab] = useState<AdminTab>("knowledge");
@@ -31,6 +45,50 @@ export default function Dashboard() {
       const res = await knowledgeApi.search(searchQ, "exam", 5);
       setSearchResults(res.results);
     } catch (err) { console.error(err); }
+  };
+
+  // --- Knowledge upload state ---
+  const [uploadDocType, setUploadDocType] = useState("exam");
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadResult, setUploadResult] = useState("");
+  const [uploadError, setUploadError] = useState("");
+
+  const handleUploadDocument = async () => {
+    if (!uploadFile || !uploadTitle.trim()) return;
+    setUploadLoading(true);
+    setUploadError("");
+    setUploadResult("");
+    try {
+      const res = await knowledgeApi.uploadDocument(uploadFile, uploadDocType, uploadTitle.trim());
+      setUploadResult(`上传成功: "${res.title}" — ${res.chunk_count} 个分块`);
+      setUploadFile(null);
+      setUploadTitle("");
+      loadDocuments();
+    } catch (err: any) {
+      setUploadError(err.message || "上传失败");
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  // --- Knowledge delete state ---
+  const [deleteTarget, setDeleteTarget] = useState<DocumentItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await knowledgeApi.deleteDocument(deleteTarget.id);
+      setDeleteTarget(null);
+      loadDocuments();
+    } catch (err: any) {
+      alert(`删除失败: ${err.message}`);
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   // --- Import tab state ---
@@ -175,6 +233,73 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Upload Section */}
+          <div className="card p-5">
+            <h2 className="text-sm font-semibold text-warm-900 mb-3 flex items-center gap-2">
+              <UploadCloud className="h-4 w-4 text-brand-500" /> 上传文档
+            </h2>
+            <p className="text-xs text-warm-400 mb-4">
+              支持 PDF / Markdown / TXT 格式，文件内容将被分块并向量化存储到知识库。
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div>
+                <label className="block text-xs text-warm-500 mb-1">文档类型</label>
+                <select
+                  value={uploadDocType}
+                  onChange={(e) => setUploadDocType(e.target.value)}
+                  className="input-field w-full py-2"
+                >
+                  <option value="exam">真题</option>
+                  <option value="policy">政策</option>
+                  <option value="news">时政</option>
+                  <option value="model">范文</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs text-warm-500 mb-1">标题</label>
+                <input
+                  type="text"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  placeholder="输入文档标题..."
+                  className="input-field w-full py-2"
+                />
+              </div>
+            </div>
+
+            <FileUploadZone
+              onFileSelect={setUploadFile}
+              accept=".pdf,.md,.txt,.markdown"
+              allowedExtensions={["pdf", "md", "txt", "markdown"]}
+              disabled={uploadLoading}
+              hint="拖拽 PDF / MD / TXT 文件到此处，或点击选择"
+              maxSizeMB={50}
+            />
+
+            {uploadFile && uploadTitle.trim() && (
+              <button
+                onClick={handleUploadDocument}
+                disabled={uploadLoading}
+                className="btn-accent mt-4 text-sm py-2.5 px-6 flex items-center gap-2 disabled:opacity-60"
+              >
+                <UploadCloud className="h-4 w-4" />
+                {uploadLoading ? "正在上传并处理..." : `上传 ${uploadFile.name}`}
+              </button>
+            )}
+
+            {uploadResult && (
+              <div className="mt-3 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-4 py-2.5 border border-emerald-100">
+                {uploadResult}
+              </div>
+            )}
+            {uploadError && (
+              <div className="mt-3 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 border border-red-100">
+                {uploadError}
+              </div>
+            )}
+          </div>
+
           {/* Document list */}
           <div className="card p-5">
             <h2 className="text-sm font-semibold text-warm-900 mb-4">文档列表</h2>
@@ -190,13 +315,14 @@ export default function Dashboard() {
                       <th className="pb-2 font-medium text-warm-500">来源</th>
                       <th className="pb-2 font-medium text-warm-500">分块</th>
                       <th className="pb-2 font-medium text-warm-500">状态</th>
+                      <th className="pb-2 font-medium text-warm-500">操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     {documents.map((doc) => (
                       <tr key={doc.id} className="border-b border-warm-50">
                         <td className="py-2.5 text-warm-900 max-w-xs truncate">{doc.title}</td>
-                        <td className="py-2.5"><span className="tag tag-green">{doc.doc_type}</span></td>
+                        <td className="py-2.5"><span className="tag tag-green">{DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}</span></td>
                         <td className="py-2.5 text-warm-500">{doc.source_name || "-"}</td>
                         <td className="py-2.5 text-warm-500">{doc.chunk_count}</td>
                         <td className="py-2.5">
@@ -204,7 +330,15 @@ export default function Dashboard() {
                             doc.status === "ingested" ? "bg-emerald-50 text-emerald-600"
                             : doc.status === "error" ? "bg-red-50 text-red-600"
                             : "bg-amber-50 text-amber-600"
-                          }`}>{doc.status}</span>
+                          }`}>{STATUS_LABELS[doc.status] || doc.status}</span>
+                        </td>
+                        <td className="py-2.5">
+                          <button
+                            onClick={() => setDeleteTarget(doc)}
+                            className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            删除
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -213,6 +347,37 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* Delete confirmation modal */}
+          {deleteTarget && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+              <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+                <h3 className="text-sm font-semibold text-warm-900 mb-2">确认删除</h3>
+                <p className="text-sm text-warm-500 mb-1">
+                  将删除文档 "<span className="font-medium text-warm-700">{deleteTarget.title}</span>"
+                </p>
+                <p className="text-xs text-warm-400 mb-4">
+                  此操作会同时从数据库和向量库中删除该文档及其所有分块，不可恢复。
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    disabled={deleteLoading}
+                    className="btn-secondary text-sm py-2 px-4"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleteLoading}
+                    className="bg-red-500 text-white text-sm py-2 px-4 rounded-xl hover:bg-red-600 transition-colors disabled:opacity-60"
+                  >
+                    {deleteLoading ? "删除中..." : "确认删除"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 

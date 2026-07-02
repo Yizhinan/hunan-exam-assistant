@@ -18,6 +18,13 @@ def get_embedding_model() -> "SentenceTransformer":
     """Lazy-load the bge-large-zh model (singleton)."""
     global _embedding_model
     if _embedding_model is None:
+        import os
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        if settings.HF_ENDPOINT and "HF_ENDPOINT" not in os.environ:
+            os.environ["HF_ENDPOINT"] = settings.HF_ENDPOINT
+
         from sentence_transformers import SentenceTransformer
 
         _embedding_model = SentenceTransformer("BAAI/bge-large-zh-v1.5")

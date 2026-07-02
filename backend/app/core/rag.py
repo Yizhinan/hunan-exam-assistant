@@ -97,6 +97,28 @@ class RAGService:
 
         return len(chunks)
 
+    # -------- Deletion --------
+
+    def remove(self, document_id: str, doc_type: DocType) -> int:
+        """
+        Remove all chunks belonging to a document from its ChromaDB collection.
+
+        Returns the number of chunks deleted.
+        """
+        collection_name = COLLECTION_MAP[doc_type]
+        collection = self._client.get_collection(name=collection_name)
+
+        before = collection.get(
+            where={"document_id": str(document_id)},
+            include=[],
+        )
+        count = len(before.get("ids", []))
+
+        if count > 0:
+            collection.delete(where={"document_id": str(document_id)})
+
+        return count
+
     # -------- Retrieval --------
 
     def retrieve(

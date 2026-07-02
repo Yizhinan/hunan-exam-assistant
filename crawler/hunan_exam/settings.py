@@ -36,3 +36,7 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 
 # Logging
 LOG_LEVEL = "INFO"
+
+# Backend API target for pipeline ingestion
+BACKEND_API_BASE = "http://localhost:8000"
+BACKEND_API_TOKEN = ""  # Set via environment or command line: -s BACKEND_API_TOKEN=...

@@ -12,6 +12,7 @@ excellent references for 申论 writing style and argumentation.
 import re
 import scrapy
 from datetime import date, datetime
+from hunan_exam.items import EssayItem
 
 
 class PeopleDailyEssaySpider(scrapy.Spider):
@@ -50,13 +51,13 @@ class PeopleDailyEssaySpider(scrapy.Spider):
         if len(content) < 300:
             return  # Skip very short pieces
 
-        yield {
-            "title": title.strip(),
-            "content": content,
-            "source_name": "人民日报/人民网",
-            "source_url": response.url,
-            "topic": self._extract_topic(title + content[:200]),
-        }
+        yield EssayItem(
+            title=title.strip(),
+            content=content,
+            source_name="人民日报/人民网",
+            source_url=response.url,
+            topic=self._extract_topic(title + content[:200]),
+        )
 
     @staticmethod
     def _extract_topic(text: str) -> str:
@@ -111,10 +112,10 @@ class QstheorySpider(scrapy.Spider):
         if len(content) < 300:
             return
 
-        yield {
-            "title": title.strip(),
-            "content": content,
-            "source_name": "求是网",
-            "source_url": response.url,
-            "topic": PeopleDailyEssaySpider._extract_topic(title + content[:200]),
-        }
+        yield EssayItem(
+            title=title.strip(),
+            content=content,
+            source_name="求是网",
+            source_url=response.url,
+            topic=PeopleDailyEssaySpider._extract_topic(title + content[:200]),
+        )

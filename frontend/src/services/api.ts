@@ -185,7 +185,7 @@ export interface GradingResult {
 
 export interface GradeRequest {
   question: string;
-  material?: string;
+  material: string;
   answer: string;
   use_rag: boolean;
 }
@@ -248,6 +248,43 @@ export interface DocumentListResponse {
   page_size: number;
 }
 
+export interface UploadDocumentResponse {
+  id: string;
+  title: string;
+  doc_type: string;
+  chunk_count: number;
+  status: string;
+}
+
+export interface IngestItem {
+  doc_type: string;
+  title: string;
+  content: string;
+  source_url?: string;
+  source_name?: string;
+  topic?: string;
+  exam_year?: number;
+  category?: string;
+  tags?: string[];
+}
+
+export interface IngestItemResult {
+  index: number;
+  title: string;
+  doc_type: string;
+  status: string;
+  chunk_count: number;
+  error: string | null;
+}
+
+export interface IngestResponse {
+  total: number;
+  ingested: number;
+  skipped: number;
+  errors: number;
+  results: IngestItemResult[];
+}
+
 export const knowledgeApi = {
   search: (q: string, docType = "exam", topK = 5) =>
     api.get<SearchResponse>(`/knowledge/search?q=${encodeURIComponent(q)}&doc_type=${docType}&top_k=${topK}`),
@@ -256,6 +293,20 @@ export const knowledgeApi = {
     if (docType) params.set("doc_type", docType);
     return api.get<DocumentListResponse>(`/knowledge/documents?${params}`);
   },
+  /** Upload a document file (PDF/MD/TXT) with metadata. */
+  uploadDocument: (file: File, docType: string, title: string, sourceUrl = "", sourceName = "") =>
+    api.uploadFile<UploadDocumentResponse>("/knowledge/upload", file, {
+      doc_type: docType,
+      title,
+      source_url: sourceUrl,
+      source_name: sourceName,
+    }),
+  /** Delete a document (PostgreSQL + ChromaDB). */
+  deleteDocument: (docId: string) =>
+    api.delete<void>(`/knowledge/documents/${docId}`),
+  /** Bulk ingest items from crawler pipeline. */
+  ingestItems: (items: IngestItem[]) =>
+    api.post<IngestResponse>("/knowledge/ingest", { items }),
 };
 
 // ---------- Daily Essay types ----------
