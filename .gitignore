@@ -7,3 +7,5 @@ chroma_data/
 dist/
 .vite/
 *.db
+
+difficulty_cache.json

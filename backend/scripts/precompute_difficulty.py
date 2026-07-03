@@ -131,13 +131,17 @@ out_path = "difficulty_cache.json"
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(cache, f, ensure_ascii=False)
 
-print(f"Saved to {out_path} ({os.path.getsize(out_path)/1024:.0f} KB)")
-print(f"Total time: {time.time()-t0:.1f}s")
+size_kb = os.path.getsize(out_path) / 1024
+print(f"Saved to {out_path} ({size_kb:.0f} KB)")
 
-# Show distribution
-tiers = {"保底": 0, "稳妥": 0, "冲刺": 0}
-for v in cache.values():
-    tiers[v["tier"]] += 1
-print(f"Tiers: {tiers}")
-
+# Also write to Redis
+try:
+    from redis import Redis
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    redis_client = Redis.from_url(redis_url, decode_responses=True)
+    redis_client.set("difficulty:cache", json.dumps(cache, ensure_ascii=False))
+    print(f"Saved to Redis (difficulty:cache): {len(cache)} positions")
+    redis_client.close()
+except Exception as e:
+    print(f"Warning: Failed to write to Redis: {e}")
 db.close()

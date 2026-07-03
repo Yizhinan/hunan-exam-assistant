@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Default cache file path (relative to backend directory)
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "difficulty_cache.json")
 
+# Redis key for the entire difficulty cache blob
+REDIS_KEY = "difficulty:cache"
+
+
 
 class DifficultyCache:
     """Thread-safe in-memory cache of pre-computed difficulty scores."""
@@ -32,6 +36,17 @@ class DifficultyCache:
         self._scores: dict[str, dict] = {}
         self._initialized: bool = False
         self._year: int | None = None
+        self._async_redis = None  # lazy init
+
+    async def _get_async_redis(self):
+        """Lazy-init async Redis client from settings."""
+        if self._async_redis is None:
+            from redis.asyncio import Redis
+            from app.core.config import get_settings
+            settings = get_settings()
+            logger.info("Connecting to Redis at %s for difficulty cache", settings.REDIS_URL)
+            self._async_redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        return self._async_redis
 
     async def ensure_init(self, db=None, year: int | None = None) -> bool:
         """Ensure cache is initialized. Prefers fresh DB computation over stale JSON.
@@ -43,30 +58,53 @@ class DifficultyCache:
         if self._initialized and self._year == year:
             return False
 
-        # Always compute from DB when available (more reliable than stale JSON)
+        # 1) Fresh DB computation (most accurate)
         if db is not None:
             return await self.refresh(db, year)
 
-        # Fall back to JSON file if no DB session
-        cache_path = os.path.normpath(CACHE_FILE)
-        if os.path.exists(cache_path):
-            return self._load_from_file(cache_path)
+        # 2) Try Redis
+        if await self._load_from_redis():
+            return True
 
-        logger.warning("Difficulty cache not initialized: no JSON file and no DB session")
+        # 3) Fallback to JSON file
+        if self._load_from_file():
+            return True
+
+        logger.warning("Difficulty cache not initialized: no DB, no Redis, no JSON file")
         return False
 
-    def _load_from_file(self, path: str) -> bool:
-        """Load precomputed scores from a JSON file."""
+    def _load_from_file(self) -> bool:
+        """Fallback: load precomputed scores from JSON file."""
+        cache_path = os.path.normpath(CACHE_FILE)
+        if not os.path.exists(cache_path):
+            return False
         with self._lock:
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(cache_path, "r", encoding="utf-8") as f:
                     self._scores = json.load(f)
                 self._initialized = True
-                logger.info("Difficulty cache loaded from %s: %d positions", path, len(self._scores))
+                logger.info("Difficulty cache loaded from %s: %d positions", cache_path, len(self._scores))
                 return True
             except Exception as e:
-                logger.error("Failed to load difficulty cache from %s: %s", path, e)
+                logger.error("Failed to load difficulty cache from %s: %s", cache_path, e)
                 return False
+
+    async def _load_from_redis(self) -> bool:
+        """Load cache from Redis into in-memory L1 dict."""
+        try:
+            r = await self._get_async_redis()
+            data = await r.get(REDIS_KEY)
+            if data:
+                with self._lock:
+                    self._scores = json.loads(data)
+                    self._initialized = True
+                logger.info("Difficulty cache loaded from Redis: %d positions", len(self._scores))
+                return True
+            else:
+                logger.info("Redis key %s not found; cache will be computed from DB", REDIS_KEY)
+        except Exception as e:
+            logger.warning("Failed to load difficulty cache from Redis: %s", e)
+        return False
 
     async def refresh(self, db, year: int | None = None) -> bool:
         """Recompute all difficulty scores in O(n) using pre-aggregated stats.
@@ -336,14 +374,22 @@ class DifficultyCache:
                 len(new_scores), year or "all",
             )
 
-            # Persist to JSON file for fast startup next time
+            # --- Persist to Redis (primary) ---
+            try:
+                r = await self._get_async_redis()
+                await r.set(REDIS_KEY, json.dumps(new_scores, ensure_ascii=False))
+                logger.info("Difficulty cache written to Redis (%s): %d positions", REDIS_KEY, len(new_scores))
+            except Exception as e:
+                logger.warning("Failed to persist difficulty cache to Redis: %s", e)
+
+            # --- Persist to JSON file (fallback for when Redis is unavailable) ---
             try:
                 cache_path = os.path.normpath(CACHE_FILE)
                 with open(cache_path, "w", encoding="utf-8") as f:
                     json.dump(new_scores, f, ensure_ascii=False)
-                logger.info("Difficulty cache written to %s", cache_path)
+                logger.info("Difficulty cache written to %s (fallback)", cache_path)
             except Exception as e:
-                logger.warning("Failed to persist difficulty cache: %s", e)
+                logger.warning("Failed to persist difficulty cache to file: %s", e)
 
             return True
 
