@@ -92,6 +92,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     volumes:
       - ./backend:/app
+      - ./crawler:/crawler
     depends_on:
       postgres:
         condition: service_healthy
@@ -109,6 +110,7 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./backend:/app
+      - ./crawler:/crawler
     depends_on:
       postgres:
         condition: service_healthy

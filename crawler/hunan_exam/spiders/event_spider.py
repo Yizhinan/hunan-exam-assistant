@@ -54,10 +54,10 @@ class XinhuaPoliticsSpider(scrapy.Spider):
         # Date from URL: /politics/YYYYMMDD/hash/c.html
         date_str = self._extract_date(response)
 
-        # Content: #detailContent p
-        content_parts = response.css("#detailContent p::text").getall()
+        # Content: #detailContent — use *::text to capture nested spans
+        content_parts = response.css("#detailContent *::text").getall()
         if not content_parts:
-            content_parts = response.css(".article-content p::text, #detail p::text").getall()
+            content_parts = response.css(".article-content *::text, #detail *::text").getall()
         content = "\n".join(p.strip() for p in content_parts if len(p.strip()) > 10)
 
         if len(content) < 300:
