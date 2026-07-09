@@ -55,8 +55,9 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
         year = date.today().year
 
     user_message = f"请生成 {year} 年中国重大时政事件列表。"
+    prompt = SYSTEM_PROMPT.replace("{year}", str(year))
     try:
-        result = await asyncio.to_thread(chat_json, SYSTEM_PROMPT.format(year=year), user_message)
+        result = await asyncio.to_thread(chat_json, prompt, user_message)
         events = result.get("events", [])
     except Exception as e:
         logger.error("LLM event generation failed for year %s: %s", year, e)
