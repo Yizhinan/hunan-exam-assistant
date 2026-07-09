@@ -9,7 +9,7 @@ celery_app = Celery(
     "hunan_exam",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.grading", "app.tasks.crawl"],
+    include=["app.tasks.grading", "app.tasks.crawl", "app.tasks.events"],
 )
 
 celery_app.conf.update(
@@ -29,6 +29,10 @@ celery_app.conf.update(
         },
         "crawl-essays-weekly": {
             "task": "app.tasks.crawl.crawl_essays",
+            "schedule": 604800.0,  # weekly
+        },
+        "generate-events-weekly": {
+            "task": "generate-events-weekly",
             "schedule": 604800.0,  # weekly
         },
     },
