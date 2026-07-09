@@ -112,8 +112,85 @@ def _migrate_sqlite():
             conn.execute("ALTER TABLE essay_submissions ADD COLUMN material TEXT")
             logger.info("Migration: added column essay_submissions.material")
         conn.commit()
+
+        # users: is_admin column (2025-07)
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        if "is_admin" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0 NOT NULL")
+            logger.info("Migration: added column users.is_admin")
+        conn.commit()
+
+        # current_events table (2026-07)
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS current_events (
+                    id VARCHAR(36) PRIMARY KEY,
+                    title VARCHAR(500) NOT NULL,
+                    description TEXT NOT NULL,
+                    event_date DATE NOT NULL,
+                    category VARCHAR(50) NOT NULL,
+                    relevance VARCHAR(20) NOT NULL DEFAULT '了解',
+                    source VARCHAR(500),
+                    year INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT 1 NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+        except Exception:
+            pass  # table already exists
     finally:
         conn.close()
+
+
+async def _migrate_postgres():
+    """Add missing columns to PostgreSQL for model changes."""
+    if "sqlite" in settings.DATABASE_URL:
+        return
+
+    from sqlalchemy import text
+    async with engine.begin() as conn:
+        # users: is_admin column (2025-07)
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='users' AND column_name='is_admin'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text(
+                "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT false NOT NULL"
+            ))
+            logger.info("Migration (PG): added column users.is_admin")
+
+        # current_events table (2026-07)
+        result = await conn.execute(text(
+            "SELECT table_name FROM information_schema.tables WHERE table_name='current_events'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text("""
+                CREATE TABLE current_events (
+                    id VARCHAR(36) PRIMARY KEY,
+                    title VARCHAR(500) NOT NULL,
+                    description TEXT NOT NULL,
+                    event_date DATE NOT NULL,
+                    category VARCHAR(50) NOT NULL,
+                    relevance VARCHAR(20) NOT NULL DEFAULT '了解',
+                    source VARCHAR(500),
+                    year INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT true NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_current_events_year ON current_events(year)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_current_events_category ON current_events(category)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_current_events_relevance ON current_events(relevance)"
+            ))
+            logger.info("Migration (PG): created table current_events")
+        await conn.commit()
 
 
 async def get_db():

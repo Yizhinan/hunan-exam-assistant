@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
-from app.api import auth, essay, knowledge, daily, analysis
+from app.api import auth, essay, knowledge, daily, analysis, admin
 
 # Import models so they register with Base.metadata for auto-create
 import app.models.user  # noqa: F401
@@ -15,6 +15,7 @@ import app.models.document  # noqa: F401
 import app.models.essay  # noqa: F401
 import app.models.daily_essay  # noqa: F401
 import app.models.position  # noqa: F401
+import app.models.current_event  # noqa: F401
 
 settings = get_settings()
 
@@ -22,9 +23,10 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
-    # Apply SQLite schema migrations (new columns for model changes)
-    from app.core.database import _migrate_sqlite
+    # Apply schema migrations (new columns for model changes)
+    from app.core.database import _migrate_sqlite, _migrate_postgres
     _migrate_sqlite()
+    await _migrate_postgres()
     # Create tables on startup — handle both async (PostgreSQL) and sync (SQLite) engines
     if "sqlite" in settings.DATABASE_URL:
         # Sync engine (SQLite)
@@ -58,6 +60,7 @@ app.include_router(essay.router)
 app.include_router(knowledge.router)
 app.include_router(daily.router)
 app.include_router(analysis.router)
+app.include_router(admin.router)
 
 
 @app.get("/api/health")
