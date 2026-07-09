@@ -10,10 +10,11 @@ from app.tasks.celery_app import celery_app
 CRAWLER_DIR = Path(__file__).resolve().parent.parent.parent.parent / "crawler"
 
 
-def _run_spider(spider_name: str) -> dict:
+def _run_spider(spider_name: str, api_base: str = "http://localhost:8000") -> dict:
     """Run a Scrapy spider and return result summary."""
     result = subprocess.run(
-        [sys.executable, "-m", "scrapy", "crawl", spider_name],
+        [sys.executable, "-m", "scrapy", "crawl", spider_name,
+         "-s", f"BACKEND_API_BASE={api_base}"],
         cwd=str(CRAWLER_DIR),
         capture_output=True,
         text=True,
@@ -93,9 +94,10 @@ def crawl_events():
       - national_events: 新华网时政
     """
     results = {}
+    api_base = "http://backend:8000"  # Docker internal network
     for spider in ["national_events"]:
         try:
-            results[spider] = _run_spider(spider)
+            results[spider] = _run_spider(spider, api_base=api_base)
         except Exception as e:
             results[spider] = {"error": str(e)}
     return results

@@ -187,9 +187,8 @@ CLASSIFY_PROMPT = """你是一位公务员考试时政辅导专家。请对以�
 async def ingest_events(
     req: IngestEventsRequest,
     db = Depends(get_db),
-    _admin = Depends(require_admin),
 ):
-    """Ingest crawled current events — classify with LLM, store to DB (admin only)."""
+    """Ingest crawled current events — classify with LLM, store to DB."""
     today = date.today()
 
     # Fetch existing titles for dedup
