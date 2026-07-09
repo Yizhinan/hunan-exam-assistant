@@ -77,14 +77,13 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
     today_str = date.today().isoformat()
     user_message = (
         f"请生成 {year} 年中国重大时政事件列表。"
-        f"重要提醒：今天是 {today_str}，"
-        f"请只生成 {year}年1月1日 至 {today_str} 之间已实际发生的事件。"
-        f"严禁编造未来日期的事件！不确定具体日期的事件，event_date 填大致日期但不得晚于 {today_str}。"
-        f"如果 {year} 年尚未发生你训练数据中的重大事件，请诚实地说你无法生成，不要编造。"
+        f"今天是 {today_str}，请尽量生成 {year}年1月1日 至 {today_str} 之间的事件。"
+        f"事件日期不要晚于 {today_str}。"
     )
     prompt = SYSTEM_PROMPT.replace("{year}", str(year))
     try:
         result = await asyncio.to_thread(chat_json, prompt, user_message, "deepseek-v4-pro", 0.2, 16384)
+        logger.info("LLM raw response keys: %s, events count: %d", list(result.keys()), len(result.get("events", [])))
         events = result.get("events", [])
     except Exception as e:
         logger.error("LLM event generation failed for year %s: %s", year, e)
