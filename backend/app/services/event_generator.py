@@ -1,7 +1,9 @@
 """LLM-powered current event generator for exam prep."""
 
+import asyncio
 import logging
 from datetime import date
+from typing import Any
 
 from sqlalchemy import select
 
@@ -35,7 +37,7 @@ SYSTEM_PROMPT = """你是一位湖南省公务员考试时政辅导专家。请�
 }"""
 
 
-async def generate_events(db, year: int | None = None) -> dict:
+async def generate_events(db: Any, year: int | None = None) -> dict:
     """Generate current events for a given year via DeepSeek LLM.
 
     Skips events whose titles already exist in the database for that year.
@@ -53,8 +55,12 @@ async def generate_events(db, year: int | None = None) -> dict:
         year = date.today().year
 
     user_message = f"请生成 {year} 年中国重大时政事件列表。"
-    result = chat_json(SYSTEM_PROMPT.format(year=year), user_message)
-    events = result.get("events", [])
+    try:
+        result = await asyncio.to_thread(chat_json, SYSTEM_PROMPT.format(year=year), user_message)
+        events = result.get("events", [])
+    except Exception as e:
+        logger.error("LLM event generation failed for year %s: %s", year, e)
+        return {"generated": 0, "added": 0, "skipped": 0}
 
     if not events:
         logger.warning("LLM returned 0 events for year %s", year)
