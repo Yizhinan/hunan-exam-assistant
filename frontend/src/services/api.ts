@@ -148,6 +148,7 @@ export interface UserInfo {
   username: string;
   email: string;
   display_name: string;
+  is_admin: boolean;
   created_at: string;
 }
 
@@ -367,10 +368,12 @@ export const dailyApi = {
     const params = category ? `?category=${encodeURIComponent(category)}` : "";
     return api.get<TodayResponse>(`/daily/today${params}`);
   },
-  getArchive: (page = 1, pageSize = 12, topic?: string, category?: string) => {
+  getArchive: (page = 1, pageSize = 12, topic?: string, category?: string, dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (topic) params.set("topic", topic);
     if (category) params.set("category", category);
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
     return api.get<DailyListResponse>(`/daily/archive?${params}`);
   },
   getTopics: () => api.get<TopicItem[]>("/daily/topics"),
@@ -500,4 +503,102 @@ export const analysisApi = {
   /** Import interview score Excel (.xlsx). */
   importScores: (file: File, year: number) =>
     api.uploadFile<ImportResult>("/analysis/import/scores", file, { year }),
+};
+
+// ---------- Admin types ----------
+
+export interface AdminUserOut {
+  id: string;
+  username: string;
+  email: string;
+  display_name: string | null;
+  is_admin: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUserOut[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  email: string;
+  password: string;
+  display_name?: string | null;
+  is_admin?: boolean;
+}
+
+export interface UpdateUserRequest {
+  username?: string | null;
+  email?: string | null;
+  password?: string | null;
+  display_name?: string | null;
+  is_admin?: boolean | null;
+}
+
+export const adminApi = {
+  listUsers: (page = 1, pageSize = 20, search?: string) => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (search) params.set("search", search);
+    return api.get<AdminUserListResponse>(`/admin/users?${params}`);
+  },
+  createUser: (data: CreateUserRequest) => api.post<AdminUserOut>("/admin/users", data),
+  updateUser: (id: string, data: UpdateUserRequest) => api.put<AdminUserOut>(`/admin/users/${id}`, data),
+  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
+};
+
+// ---------- Current Events types ----------
+
+export interface EventOut {
+  id: string;
+  title: string;
+  description: string;
+  event_date: string;
+  category: string;
+  relevance: string;
+  source: string | null;
+  year: number;
+  created_at: string | null;
+}
+
+export interface EventListResponse {
+  items: EventOut[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface EventRefreshResponse {
+  generated: number;
+  added: number;
+  skipped: number;
+}
+
+export interface EventListParams {
+  year?: number;
+  category?: string;
+  relevance?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export const eventsApi = {
+  list: (params: EventListParams = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.year) searchParams.set("year", String(params.year));
+    if (params.category) searchParams.set("category", params.category);
+    if (params.relevance) searchParams.set("relevance", params.relevance);
+    if (params.page) searchParams.set("page", String(params.page));
+    if (params.page_size) searchParams.set("page_size", String(params.page_size));
+    const qs = searchParams.toString();
+    return api.get<EventListResponse>(`/events${qs ? `?${qs}` : ""}`);
+  },
+  refresh: (year?: number) => {
+    const qs = year ? `?year=${year}` : "";
+    return api.post<EventRefreshResponse>(`/events/refresh${qs}`);
+  },
 };
