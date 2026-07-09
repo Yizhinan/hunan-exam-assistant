@@ -37,3 +37,13 @@ class EssayItem(scrapy.Item):
     title = scrapy.Field()
     content = scrapy.Field()
     topic = scrapy.Field()           # 乡村振兴 / 基层治理 / 经济发展 etc.
+
+
+class EventItem(scrapy.Item):
+    """A major national current event for 常识备考."""
+
+    source_url = scrapy.Field()
+    source_name = scrapy.Field()
+    title = scrapy.Field()
+    content = scrapy.Field()
+    event_date = scrapy.Field()      # YYYY-MM-DD

@@ -21,6 +21,7 @@ USER_AGENT = (
 ITEM_PIPELINES = {
     "hunan_exam.pipelines.DuplicateFilterPipeline": 100,
     "hunan_exam.pipelines.PostgreSQLPipeline": 200,
+    "hunan_exam.pipelines.EventPipeline": 300,
 }
 
 # Respect caching

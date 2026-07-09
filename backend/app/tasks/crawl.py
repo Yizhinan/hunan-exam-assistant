@@ -84,6 +84,23 @@ def crawl_essays():
     return results
 
 
+@celery_app.task(name="app.tasks.crawl.crawl_events")
+def crawl_events():
+    """
+    Daily task: crawl national current events for exam prep.
+
+    Runs these spiders:
+      - national_events: 新华网时政
+    """
+    results = {}
+    for spider in ["national_events"]:
+        try:
+            results[spider] = _run_spider(spider)
+        except Exception as e:
+            results[spider] = {"error": str(e)}
+    return results
+
+
 @celery_app.task(name="app.tasks.crawl.crawl_all")
 def crawl_all():
     """Run all crawlers (manual trigger)."""

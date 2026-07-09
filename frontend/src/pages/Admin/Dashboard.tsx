@@ -542,8 +542,7 @@ export default function Dashboard() {
               生成时政大事件
             </h2>
             <p className="text-xs text-warm-400 mb-4">
-              调用 DeepSeek LLM 自动生成指定年份的中国重大时政事件，覆盖科技、政治党建、经济、文化、体育、外交、民生、生态 8 大领域。
-              已存在的事件（同标题同年份）会自动跳过。
+              从新华网、人民网时政频道爬取真实新闻，LLM 自动分类领域和考试相关度后入库。每天定时执行。
             </p>
 
             <div className="flex items-center gap-4 mb-4">
@@ -565,7 +564,7 @@ export default function Dashboard() {
                 className="btn-accent text-sm py-2.5 px-6 flex items-center gap-2 disabled:opacity-60"
               >
                 <RefreshCw className={`h-4 w-4 ${eventRefreshing ? "animate-spin" : ""}`} />
-                {eventRefreshing ? "正在生成..." : "生成事件"}
+                {eventRefreshing ? "正在触发..." : "爬取事件"}
               </button>
             </div>
 

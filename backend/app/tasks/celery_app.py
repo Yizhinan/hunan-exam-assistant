@@ -31,9 +31,9 @@ celery_app.conf.update(
             "task": "app.tasks.crawl.crawl_essays",
             "schedule": 604800.0,  # weekly
         },
-        "generate-events-weekly": {
-            "task": "app.tasks.events.generate_events",
-            "schedule": 604800.0,  # weekly
+        "crawl-events-daily": {
+            "task": "app.tasks.crawl.crawl_events",
+            "schedule": 86400.0,  # daily
         },
     },
 )

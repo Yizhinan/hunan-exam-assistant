@@ -6,7 +6,7 @@ import logging
 import httpx
 from scrapy.exceptions import DropItem
 
-from hunan_exam.items import ExamQuestionItem, NewsArticleItem, EssayItem
+from hunan_exam.items import ExamQuestionItem, NewsArticleItem, EssayItem, EventItem
 
 logger = logging.getLogger(__name__)
 
@@ -157,5 +157,92 @@ class PostgreSQLPipeline:
         # All retries exhausted
         spider.logger.error(
             f"Ingest FAILED after {self.MAX_RETRIES} attempts. "
+            f"Dropped {len(batch)} items: {[i['title'] for i in batch]}"
+        )
+
+
+class EventPipeline:
+    """
+    POST scraped current events to /api/events/ingest.
+
+    Same pattern as PostgreSQLPipeline but targets the events endpoint
+    instead of the knowledge ingest endpoint.
+    """
+
+    BATCH_SIZE = 20
+    API_TIMEOUT = 120.0
+    MAX_RETRIES = 3
+
+    def open_spider(self, spider):
+        self.buffer: list[dict] = []
+        self.api_base = spider.settings.get(
+            "BACKEND_API_BASE", "http://localhost:8000"
+        )
+        self.api_token = spider.settings.get("BACKEND_API_TOKEN", "")
+        spider.logger.info(
+            f"EventPipeline API target: {self.api_base}/api/events/ingest"
+        )
+
+    def process_item(self, item, spider):
+        if not isinstance(item, EventItem):
+            return item  # Pass through non-event items
+
+        payload = {
+            "title": item.get("title", ""),
+            "content": item.get("content", ""),
+            "source_url": item.get("source_url", ""),
+            "source_name": item.get("source_name", ""),
+            "event_date": item.get("event_date", ""),
+        }
+        self.buffer.append(payload)
+        if len(self.buffer) >= self.BATCH_SIZE:
+            self._flush(spider)
+        return item
+
+    def close_spider(self, spider):
+        if self.buffer:
+            self._flush(spider)
+
+    def _flush(self, spider):
+        batch = self.buffer[:]
+        self.buffer.clear()
+
+        headers = {"Content-Type": "application/json"}
+        if self.api_token:
+            headers["Authorization"] = f"Bearer {self.api_token}"
+
+        url = f"{self.api_base}/api/events/ingest"
+
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                with httpx.Client(timeout=self.API_TIMEOUT) as client:
+                    response = client.post(
+                        url,
+                        json={"items": batch},
+                        headers=headers,
+                    )
+                if response.status_code == 200:
+                    data = response.json()
+                    spider.logger.info(
+                        f"Events ingested: {data.get('ingested', 0)}/{len(batch)} "
+                        f"(skipped: {data.get('skipped', 0)})"
+                    )
+                    return
+                elif response.status_code == 401:
+                    spider.logger.error(
+                        "EventPipeline auth failed — check BACKEND_API_TOKEN"
+                    )
+                    return
+                else:
+                    spider.logger.warning(
+                        f"EventPipeline attempt {attempt + 1} failed: HTTP {response.status_code}"
+                    )
+            except Exception as e:
+                spider.logger.warning(
+                    f"EventPipeline attempt {attempt + 1} failed: {e}"
+                )
+
+        spider.logger.error(
+            f"EventPipeline FAILED after {self.MAX_RETRIES} attempts. "
             f"Dropped {len(batch)} items: {[i['title'] for i in batch]}"
         )

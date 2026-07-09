@@ -1,5 +1,7 @@
 """Current events API — 时政大事件."""
 
+import asyncio
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,9 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 
 from app.core.database import get_db
+from app.core.llm_client import chat_json
 from app.core.security import decode_token
 from app.models.current_event import CurrentEvent, CATEGORIES, RELEVANCE_LEVELS
 from app.api.admin import require_admin
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/events",
@@ -125,11 +130,139 @@ async def list_events(
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_events(
     year: int | None = Query(None, description="目标年份，默认当前年"),
+    _admin = Depends(require_admin),
+):
+    """Trigger crawler to fetch current events (admin only)."""
+    from app.tasks.crawl import crawl_events
+
+    try:
+        result = crawl_events.delay()
+        return RefreshResponse(
+            generated=0, added=0, skipped=0
+        )  # async — results come via Celery
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"爬虫任务触发失败：{str(e)}",
+        )
+
+
+# ============================================================
+# Ingest schemas
+# ============================================================
+
+
+class IngestEventItem(BaseModel):
+    title: str
+    content: str
+    source_url: str = ""
+    source_name: str = ""
+    event_date: str = ""
+
+
+class IngestEventsRequest(BaseModel):
+    items: list[IngestEventItem]
+
+
+class IngestResponse(BaseModel):
+    ingested: int
+    skipped: int
+
+
+# LLM classification prompt — only classifies, does NOT generate content
+CLASSIFY_PROMPT = """你是一位公务员考试时政辅导专家。请对以下新闻进行考试分类。
+
+领域分类（category）从以下选择：
+科技、政治党建、经济、文化、体育、外交、民生、生态
+
+考试相关度（relevance）从以下选择：
+- "必知"：涉及国家最高荣誉、重大政策、党代会/全会、国家级表彰
+- "了解"：部委级别政策、行业重要事件
+- "拓展"：有加分价值的背景素材、地方性事件
+
+只返回 JSON：{"category": "科技", "relevance": "必知"}"""
+
+
+@router.post("/ingest", response_model=IngestResponse)
+async def ingest_events(
+    req: IngestEventsRequest,
     db = Depends(get_db),
     _admin = Depends(require_admin),
 ):
-    """Trigger LLM generation of current events (admin only)."""
-    from app.services.event_generator import generate_events
+    """Ingest crawled current events — classify with LLM, store to DB (admin only)."""
+    today = date.today()
 
-    result = await generate_events(db, year)
-    return RefreshResponse(**result)
+    # Fetch existing titles for dedup
+    existing_result = await db.execute(
+        select(CurrentEvent.title, CurrentEvent.year)
+    )
+    existing = set(existing_result.all())  # {(title, year), ...}
+
+    ingested = 0
+    skipped = 0
+
+    for item in req.items:
+        title = item.title.strip()
+        if not title or len(item.content) < 100:
+            skipped += 1
+            continue
+
+        # Determine year from event_date or use current year
+        try:
+            ev_year = date.fromisoformat(item.event_date).year if item.event_date else today.year
+        except (ValueError, TypeError):
+            ev_year = today.year
+
+        if (title, ev_year) in existing:
+            skipped += 1
+            continue
+
+        # Classify with LLM
+        category = "政治党建"
+        relevance = "了解"
+        try:
+            classification = await asyncio.to_thread(
+                chat_json,
+                CLASSIFY_PROMPT,
+                f"标题：{title}\n\n正文：{item.content[:800]}",
+                "deepseek-chat",
+                0.1,
+                256,
+            )
+            cat = classification.get("category", "")
+            rel = classification.get("relevance", "")
+            if cat in CATEGORIES:
+                category = cat
+            if rel in RELEVANCE_LEVELS:
+                relevance = rel
+        except Exception as e:
+            logger.warning("LLM classification failed for '%s': %s", title[:50], e)
+            # Fall through with defaults
+
+        # Description: first 300 chars of content
+        desc = item.content[:300].strip()
+        if len(item.content) > 300:
+            desc += "……"
+
+        # Parse event_date
+        try:
+            ev_date = date.fromisoformat(item.event_date)
+        except (ValueError, TypeError):
+            ev_date = today
+
+        event = CurrentEvent(
+            title=title,
+            description=desc,
+            event_date=ev_date,
+            category=category,
+            relevance=relevance,
+            source=item.source_url,
+            year=ev_year,
+        )
+        db.add(event)
+        existing.add((title, ev_year))
+        ingested += 1
+
+    await db.commit()
+    logger.info("Events ingest: %d ingested, %d skipped", ingested, skipped)
+    return IngestResponse(ingested=ingested, skipped=skipped)
