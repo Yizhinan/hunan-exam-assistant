@@ -63,6 +63,7 @@ def chat_json(
     user_message: str,
     model: str = "deepseek-chat",
     temperature: float = 0.2,
+    max_tokens: int = 4096,
 ) -> dict:
     """
     Chat completion that expects a JSON response.
@@ -72,7 +73,7 @@ def chat_json(
     response = client.chat.completions.create(
         model=model,
         temperature=temperature,
-        max_tokens=4096,
+        max_tokens=max_tokens,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
