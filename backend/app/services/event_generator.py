@@ -84,7 +84,7 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
     )
     prompt = SYSTEM_PROMPT.replace("{year}", str(year))
     try:
-        result = await asyncio.to_thread(chat_json, prompt, user_message, "deepseek-chat", 0.2, 16384)
+        result = await asyncio.to_thread(chat_json, prompt, user_message, "deepseek-v4-pro", 0.2, 16384)
         events = result.get("events", [])
     except Exception as e:
         logger.error("LLM event generation failed for year %s: %s", year, e)
