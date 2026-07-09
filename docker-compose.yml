@@ -90,6 +90,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://hea_user:hea_password@postgres:5432/hunan_exam
       REDIS_URL: redis://redis:6379/0
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    volumes:
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,6 +107,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://hea_user:hea_password@postgres:5432/hunan_exam
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
