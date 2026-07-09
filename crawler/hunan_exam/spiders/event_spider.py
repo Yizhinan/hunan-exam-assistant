@@ -17,61 +17,63 @@ class XinhuaPoliticsSpider(scrapy.Spider):
     """Scrape national politics/current-affairs news from 新华网."""
 
     name = "national_events"
-    allowed_domains = ["xinhuanet.com", "www.xinhuanet.com", "news.cn", "www.news.cn"]
+    allowed_domains = ["news.cn", "www.news.cn", "xinhuanet.com", "www.xinhuanet.com"]
     start_urls = [
         "https://www.news.cn/politics/",
-        "https://www.xinhuanet.com/politics/",
     ]
 
     def parse(self, response):
-        """Parse news list page."""
-        # xinhuanet/ news.cn uses various link patterns
-        links = response.css(
-            "a[href*='/2026']::attr(href), "
-            "a[href*='/2025']::attr(href), "
-            "a[href*='politics']::attr(href)"
-        ).getall()
+        """Parse news list page — extract article links by URL pattern."""
+        # xinhuanet article URLs: /politics/YYYYMMDD/hash/c.html
+        links = response.css("a::attr(href)").getall()
 
         for link in set(links):
-            if not link.startswith("http"):
-                if link.startswith("//"):
-                    link = "https:" + link
-                elif link.startswith("/"):
-                    link = response.urljoin(link)
-                else:
-                    continue
-            yield scrapy.Request(link, self.parse_article)
+            # Only follow article detail pages (not index/special pages)
+            if "/politics/" in link and link.endswith("c.html"):
+                if not link.startswith("http"):
+                    if link.startswith("//"):
+                        link = "https:" + link
+                    elif link.startswith("/"):
+                        link = response.urljoin(link)
+                    else:
+                        continue
+                yield scrapy.Request(link, self.parse_article)
 
     def parse_article(self, response):
         """Parse individual news article."""
-        title = response.css("h1::text, .title::text, .article-title::text").get()
+        # Title: <h1><span class="title">...</span></h1>
+        title = response.css("h1 span.title::text").get()
+        if not title:
+            title = response.css("h1::text").get()
         if not title:
             return
         title = title.strip()
-        if len(title) < 10:
+        if len(title) < 8:
             return
 
-        # Extract date from URL or page
+        # Date from URL: /politics/YYYYMMDD/hash/c.html
         date_str = self._extract_date(response)
 
-        # Extract content
-        content_parts = response.css(
-            "div.article-content p::text, "
-            "div.article p::text, "
-            "#detail-content p::text, "
-            "div.detail-content p::text, "
-            "div.news-content p::text"
-        ).getall()
-        content = "\n".join(p.strip() for p in content_parts if len(p.strip()) > 20)
+        # Content: #detailContent p
+        content_parts = response.css("#detailContent p::text").getall()
+        if not content_parts:
+            content_parts = response.css(".article-content p::text, #detail p::text").getall()
+        content = "\n".join(p.strip() for p in content_parts if len(p.strip()) > 10)
 
-        if len(content) < 500:
+        if len(content) < 300:
             return
 
-        # Source name detection
+        # Source: from .source or .header-time or .info
         source_name = "新华网"
-        source_el = response.css(".source::text, .info::text, .article-source::text").get()
+        source_el = response.css(".source::text, .info::text, .header-time::text").get()
         if source_el:
-            source_name = source_el.strip()
+            source_el = source_el.strip()
+            if "新华" in source_el:
+                source_name = "新华网"
+            elif "人民" in source_el:
+                source_name = "人民日报"
+            elif "央视" in source_el:
+                source_name = "央视新闻"
 
         item = EventItem(
             source_url=response.url,
@@ -84,30 +86,29 @@ class XinhuaPoliticsSpider(scrapy.Spider):
 
     @staticmethod
     def _extract_date(response) -> str:
-        """Extract publish date from article page."""
-        # Try meta tags
-        for meta in response.css("meta[name='publishdate']::attr(content), meta[property='article:published_time']::attr(content)").getall():
+        """Extract publish date from article URL or page meta."""
+        # URL date pattern: /politics/YYYYMMDD/hash/c.html
+        url_match = re.search(r"/(\d{4})(\d{2})(\d{2})/", response.url)
+        if url_match:
+            return f"{url_match.group(1)}-{url_match.group(2)}-{url_match.group(3)}"
+
+        # Meta tags
+        for meta in response.css(
+            "meta[name='publishdate']::attr(content), "
+            "meta[property='article:published_time']::attr(content)"
+        ).getall():
             try:
                 return datetime.fromisoformat(meta.replace("Z", "+00:00")[:10]).strftime("%Y-%m-%d")
             except (ValueError, TypeError):
                 pass
 
-        # Try visible date elements
-        date_text = response.css(
-            ".date::text, .time::text, .article-time::text, "
-            ".info span::text, .source span::text"
-        ).get()
+        # Header date text
+        date_text = response.css(".header-time::text, .date::text, .time::text").get()
         if date_text:
             match = re.search(r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})", date_text)
             if match:
                 return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
 
-        # Try URL date pattern
-        url_match = re.search(r"/(\d{4})[-/](\d{2})[-/](\d{2})", response.url)
-        if url_match:
-            return f"{url_match.group(1)}-{url_match.group(2)}-{url_match.group(3)}"
-
-        # Default: today
         return datetime.now().strftime("%Y-%m-%d")
 
 
