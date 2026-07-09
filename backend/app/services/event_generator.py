@@ -97,6 +97,7 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
             year=year,
         )
         db.add(event)
+        existing_titles.add(title)
         added += 1
 
     await db.commit()

@@ -137,6 +137,11 @@ def _migrate_sqlite():
                 )
             """)
             conn.commit()
+
+            conn.execute("CREATE INDEX IF NOT EXISTS ix_current_events_year ON current_events(year)")
+            conn.execute("CREATE INDEX IF NOT EXISTS ix_current_events_category ON current_events(category)")
+            conn.execute("CREATE INDEX IF NOT EXISTS ix_current_events_relevance ON current_events(relevance)")
+            conn.commit()
         except Exception:
             pass  # table already exists
     finally:

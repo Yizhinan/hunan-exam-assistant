@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.models.current_event import CurrentEvent
+from app.models.current_event import CurrentEvent, CATEGORIES, RELEVANCE_LEVELS
 from app.api.admin import require_admin
 
 router = APIRouter(
@@ -65,6 +65,11 @@ async def list_events(
     """List current events with filtering and pagination."""
     if year is None:
         year = date.today().year
+
+    if category is not None and category not in CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"无效的领域分类: {category}")
+    if relevance is not None and relevance not in RELEVANCE_LEVELS:
+        raise HTTPException(status_code=400, detail=f"无效的相关度: {relevance}")
 
     query = select(CurrentEvent).where(
         CurrentEvent.is_active == True,
