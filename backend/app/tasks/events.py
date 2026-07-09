@@ -9,7 +9,7 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-@celery_app.task(name="generate-events-weekly")
+@celery_app.task(name="app.tasks.events.generate_events")
 def generate_events_task():
     """Run event generation in an async context."""
     async def _run():
@@ -18,15 +18,14 @@ def generate_events_task():
         if "sqlite" in settings.DATABASE_URL:
             from app.core.database import _AsyncAdapter
             db = _AsyncAdapter(SessionLocal())
+            try:
+                result = await generate_events(db)
+                return result
+            finally:
+                await db.close()
         else:
             async with SessionLocal() as session:
-                db = session
-                await generate_events(db)
-                return
+                result = await generate_events(session)
+                return result
 
-        try:
-            await generate_events(db)
-        finally:
-            await db.close()
-
-    asyncio.get_event_loop().run_until_complete(_run())
+    return asyncio.run(_run())
