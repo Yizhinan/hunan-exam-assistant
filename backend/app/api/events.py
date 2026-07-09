@@ -126,11 +126,5 @@ async def refresh_events(
     """Trigger LLM generation of current events (admin only)."""
     from app.services.event_generator import generate_events
 
-    try:
-        result = await generate_events(db, year)
-        return RefreshResponse(**result)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"事件生成失败：{str(e)}",
-        )
+    result = await generate_events(db, year)
+    return RefreshResponse(**result)
