@@ -37,7 +37,7 @@ class CurrentEvent(Base):
         String(20), nullable=False, default=RELEVANCE_LIAOJIE, index=True
     )
 
-    source: Mapped[str] = mapped_column(String(500), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(500), nullable=True)
     year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -190,7 +190,6 @@ async def _migrate_postgres():
                 "CREATE INDEX IF NOT EXISTS ix_current_events_relevance ON current_events(relevance)"
             ))
             logger.info("Migration (PG): created table current_events")
-        await conn.commit()
 
 
 async def get_db():
