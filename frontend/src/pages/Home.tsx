@@ -1,14 +1,16 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { eventsApi, EventOut } from "../services/api";
 import {
   PenLine,
   Newspaper,
   BookOpen,
   BarChart3,
   ArrowRight,
-  TrendingUp,
   Clock,
-  FileText,
+  Calendar,
+  ChevronRight,
 } from "lucide-react";
 
 const features = [
@@ -65,6 +67,107 @@ const quickStats = [
   { label: "湖南真题", value: "48", sub: "套入库" },
 ];
 
+const CATEGORY_COLORS: Record<string, string> = {
+  "科技": "bg-blue-100 text-blue-700",
+  "政治党建": "bg-red-100 text-red-700",
+  "经济": "bg-amber-100 text-amber-700",
+  "文化": "bg-purple-100 text-purple-700",
+  "体育": "bg-green-100 text-green-700",
+  "外交": "bg-indigo-100 text-indigo-700",
+  "民生": "bg-teal-100 text-teal-700",
+  "生态": "bg-emerald-100 text-emerald-700",
+};
+
+const RELEVANCE_COLORS: Record<string, string> = {
+  "必知": "bg-red-50 text-red-600 border-red-200",
+  "了解": "bg-blue-50 text-blue-600 border-blue-200",
+  "拓展": "bg-warm-100 text-warm-500 border-warm-200",
+};
+
+function EventsPreview() {
+  const [events, setEvents] = useState<EventOut[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    eventsApi
+      .list({ page_size: 4 })
+      .then((res) => setEvents(res.items))
+      .catch(() => { /* silently fail — 首页降级 */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-warm-900">时政大事件</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="card p-4 animate-pulse">
+              <div className="h-4 bg-warm-100 rounded w-16 mb-2" />
+              <div className="h-5 bg-warm-100 rounded w-full mb-2" />
+              <div className="h-4 bg-warm-50 rounded w-3/4" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (events.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-warm-900">时政大事件</h2>
+        <button
+          onClick={() => navigate("/events")}
+          className="text-sm text-warm-500 hover:text-brand-600 flex items-center gap-1 transition-colors"
+        >
+          查看更多
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {events.map((e) => (
+          <button
+            key={e.id}
+            onClick={() => navigate("/events")}
+            className="card p-4 text-left hover:shadow-elevated transition-all duration-200 group"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                  CATEGORY_COLORS[e.category] || "bg-warm-100 text-warm-500"
+                }`}
+              >
+                {e.category}
+              </span>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                  RELEVANCE_COLORS[e.relevance] || "bg-warm-50 text-warm-400 border-warm-200"
+                }`}
+              >
+                {e.relevance}
+              </span>
+            </div>
+            <h3 className="font-medium text-warm-900 text-sm leading-snug mb-1.5 group-hover:text-brand-600 transition-colors">
+              {e.title}
+            </h3>
+            <div className="flex items-center gap-1 text-xs text-warm-400">
+              <Calendar className="h-3 w-3" />
+              {e.event_date}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -105,6 +208,9 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Current events preview */}
+      <EventsPreview />
 
       {/* Feature cards */}
       <div>
@@ -153,38 +259,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Essay CTA */}
-        <div className="card p-6 bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100/50">
-          <div className="flex items-center gap-2 mb-2">
-            <FileText className="h-5 w-5 text-emerald-600" />
-            <h3 className="font-semibold text-warm-900">开始申论批改</h3>
-          </div>
-          <p className="text-sm text-warm-600 mb-4">
-            粘贴题目和作答，AI 将从立意、结构、内容、语言、格式五个维度评分
-          </p>
-          <button onClick={() => navigate("/essay")} className="btn-primary bg-emerald-600 hover:bg-emerald-700 text-sm py-2">
-            立即批改
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Daily essay CTA */}
-        <div className="card p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100/50">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="h-5 w-5 text-amber-600" />
-            <h3 className="font-semibold text-warm-900">今日范文推荐</h3>
-          </div>
-          <p className="text-sm text-warm-600 mb-4">
-            按行政执法、县乡基层、省市直分类，每日更新精选申论范文
-          </p>
-          <button onClick={() => navigate("/daily")} className="btn-primary bg-amber-600 hover:bg-amber-700 text-sm py-2">
-            去阅读
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
