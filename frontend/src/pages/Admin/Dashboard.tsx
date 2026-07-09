@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { knowledgeApi, analysisApi, eventsApi, type DocumentItem, type ImportResult, type EventRefreshResponse } from "../../services/api";
-import { Database, Search, FileText, RefreshCw, HardDrive, Upload, Download, Brain, UploadCloud, Zap } from "lucide-react";
+import { knowledgeApi, analysisApi, eventsApi, adminApi, type DocumentItem, type ImportResult, type EventRefreshResponse, type AdminUserOut } from "../../services/api";
+import { Database, Search, FileText, RefreshCw, HardDrive, Upload, Download, Brain, UploadCloud, Zap, Users } from "lucide-react";
 import FileUploadZone from "../../components/admin/FileUploadZone";
 import ImportResultPanel from "../../components/admin/ImportResultPanel";
 
-type AdminTab = "knowledge" | "import" | "events";
+type AdminTab = "knowledge" | "import" | "events" | "users";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   exam: "真题",
@@ -111,6 +111,22 @@ export default function Dashboard() {
   const [eventResult, setEventResult] = useState<EventRefreshResponse | null>(null);
   const [eventError, setEventError] = useState("");
 
+  // --- Users tab state ---
+  const [users, setUsers] = useState<AdminUserOut[]>([]);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+
+  const loadUsers = (page = 1, search = "") => {
+    setUsersLoading(true);
+    adminApi.listUsers(page, 20, search || undefined).then((res) => {
+      setUsers(res.items);
+      setUsersTotal(res.total);
+    }).catch(console.error).finally(() => setUsersLoading(false));
+  };
+
+  useEffect(() => { if (tab === "users") loadUsers(); }, [tab]);
+
   const handleImportPositions = async () => {
     if (!posFile) return;
     setPosLoading(true);
@@ -184,6 +200,7 @@ export default function Dashboard() {
     { key: "knowledge", label: "知识库", icon: Database },
     { key: "import", label: "数据导入", icon: Upload },
     { key: "events", label: "时政事件", icon: Zap },
+    { key: "users", label: "用户管理", icon: Users },
   ];
 
   return (
@@ -572,6 +589,78 @@ export default function Dashboard() {
                   <div className="text-2xl font-bold text-amber-700">{eventResult.skipped}</div>
                   <div className="text-xs text-amber-600 mt-1">已存在跳过</div>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ======== Users Tab ======== */}
+      {tab === "users" && (
+        <div className="space-y-4">
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-warm-900 flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-500" />
+                用户列表
+                <span className="text-xs text-warm-400 font-normal">共 {usersTotal} 人</span>
+              </h2>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && loadUsers(1, userSearch)}
+                  placeholder="搜索用户名 / 邮箱..."
+                  className="input-field py-2 text-sm w-48"
+                />
+                <button
+                  onClick={() => loadUsers(1, userSearch)}
+                  className="btn-secondary text-sm py-2 px-3"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {usersLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-500" />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-warm-100 text-left">
+                      <th className="pb-2 font-medium text-warm-500">用户名</th>
+                      <th className="pb-2 font-medium text-warm-500">显示名</th>
+                      <th className="pb-2 font-medium text-warm-500">邮箱</th>
+                      <th className="pb-2 font-medium text-warm-500">角色</th>
+                      <th className="pb-2 font-medium text-warm-500">注册时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-b border-warm-50">
+                        <td className="py-2.5 text-warm-900 font-medium">{u.username}</td>
+                        <td className="py-2.5 text-warm-600">{u.display_name || "-"}</td>
+                        <td className="py-2.5 text-warm-500">{u.email}</td>
+                        <td className="py-2.5">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            u.is_admin
+                              ? "bg-red-50 text-red-600"
+                              : "bg-warm-100 text-warm-500"
+                          }`}>
+                            {u.is_admin ? "管理员" : "用户"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-warm-400 text-xs">
+                          {u.created_at?.slice(0, 10) || "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
