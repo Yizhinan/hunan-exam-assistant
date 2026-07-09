@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine, Base, SessionLocal
-from app.api import auth, essay, knowledge, daily, analysis, admin
+from app.api import auth, essay, knowledge, daily, analysis, admin, events
 
 # Import models so they register with Base.metadata for auto-create
 import app.models.user  # noqa: F401
@@ -61,6 +61,7 @@ app.include_router(knowledge.router)
 app.include_router(daily.router)
 app.include_router(analysis.router)
 app.include_router(admin.router)
+app.include_router(events.router)
 
 
 @app.get("/api/health")
