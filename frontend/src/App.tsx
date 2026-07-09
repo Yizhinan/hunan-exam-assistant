@@ -12,6 +12,7 @@ import ArchivePage from "./pages/DailyEssay/ArchivePage";
 import AnalysisForm from "./pages/Analysis/FormPage";
 import AnalysisResult from "./pages/Analysis/ResultPage";
 import AdminDashboard from "./pages/Admin/Dashboard";
+import EventsPage from "./pages/CurrentEvents/EventsPage";
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
           <Route path="/analysis" element={<AnalysisForm />} />
           <Route path="/analysis/result" element={<AnalysisResult />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/events" element={<EventsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
