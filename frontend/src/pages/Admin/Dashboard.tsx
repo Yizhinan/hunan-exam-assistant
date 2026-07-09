@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { knowledgeApi, analysisApi, type DocumentItem, type ImportResult } from "../../services/api";
-import { Database, Search, FileText, RefreshCw, HardDrive, Upload, Download, Brain, UploadCloud } from "lucide-react";
+import { knowledgeApi, analysisApi, eventsApi, type DocumentItem, type ImportResult, type EventRefreshResponse } from "../../services/api";
+import { Database, Search, FileText, RefreshCw, HardDrive, Upload, Download, Brain, UploadCloud, Zap } from "lucide-react";
 import FileUploadZone from "../../components/admin/FileUploadZone";
 import ImportResultPanel from "../../components/admin/ImportResultPanel";
 
-type AdminTab = "knowledge" | "import";
+type AdminTab = "knowledge" | "import" | "events";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   exam: "真题",
@@ -105,6 +105,12 @@ export default function Dashboard() {
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
   const [cacheMsg, setCacheMsg] = useState("");
 
+  // --- Events tab state ---
+  const [eventYear, setEventYear] = useState(currentYear);
+  const [eventRefreshing, setEventRefreshing] = useState(false);
+  const [eventResult, setEventResult] = useState<EventRefreshResponse | null>(null);
+  const [eventError, setEventError] = useState("");
+
   const handleImportPositions = async () => {
     if (!posFile) return;
     setPosLoading(true);
@@ -152,6 +158,20 @@ export default function Dashboard() {
     }
   };
 
+  const handleRefreshEvents = async () => {
+    setEventRefreshing(true);
+    setEventError("");
+    setEventResult(null);
+    try {
+      const res = await eventsApi.refresh(eventYear);
+      setEventResult(res);
+    } catch (err: any) {
+      setEventError(err.message || "生成失败");
+    } finally {
+      setEventRefreshing(false);
+    }
+  };
+
   // --- Stats ---
   const stats = [
     { icon: Database, label: "知识库文档", value: total, color: "text-emerald-600", bg: "bg-emerald-50" },
@@ -163,6 +183,7 @@ export default function Dashboard() {
   const tabs: { key: AdminTab; label: string; icon: typeof Database }[] = [
     { key: "knowledge", label: "知识库", icon: Database },
     { key: "import", label: "数据导入", icon: Upload },
+    { key: "events", label: "时政事件", icon: Zap },
   ];
 
   return (
@@ -491,6 +512,68 @@ export default function Dashboard() {
             <div className="mt-4">
               <ImportResultPanel result={scoreResult} loading={scoreLoading} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======== Events Tab ======== */}
+      {tab === "events" && (
+        <div className="space-y-6">
+          <div className="card p-5">
+            <h2 className="text-sm font-semibold text-warm-900 mb-1 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" />
+              生成时政大事件
+            </h2>
+            <p className="text-xs text-warm-400 mb-4">
+              调用 DeepSeek LLM 自动生成指定年份的中国重大时政事件，覆盖科技、政治党建、经济、文化、体育、外交、民生、生态 8 大领域。
+              已存在的事件（同标题同年份）会自动跳过。
+            </p>
+
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-2 text-sm text-warm-700">
+                <span className="font-medium">年份：</span>
+                <select
+                  value={eventYear}
+                  onChange={(e) => setEventYear(Number(e.target.value))}
+                  className="input-field w-24 py-2"
+                >
+                  {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleRefreshEvents}
+                disabled={eventRefreshing}
+                className="btn-accent text-sm py-2.5 px-6 flex items-center gap-2 disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${eventRefreshing ? "animate-spin" : ""}`} />
+                {eventRefreshing ? "正在生成..." : "生成事件"}
+              </button>
+            </div>
+
+            {eventError && (
+              <div className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 border border-red-100">
+                {eventError}
+              </div>
+            )}
+
+            {eventResult && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-warm-50 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-warm-900">{eventResult.generated}</div>
+                  <div className="text-xs text-warm-400 mt-1">LLM 生成</div>
+                </div>
+                <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-emerald-700">{eventResult.added}</div>
+                  <div className="text-xs text-emerald-600 mt-1">新增入库</div>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-amber-700">{eventResult.skipped}</div>
+                  <div className="text-xs text-amber-600 mt-1">已存在跳过</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
