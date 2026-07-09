@@ -74,7 +74,14 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
     if year is None:
         year = date.today().year
 
-    user_message = f"请生成 {year} 年中国重大时政事件列表。"
+    today_str = date.today().isoformat()
+    user_message = (
+        f"请生成 {year} 年中国重大时政事件列表。"
+        f"重要提醒：今天是 {today_str}，"
+        f"请只生成 {year}年1月1日 至 {today_str} 之间已实际发生的事件。"
+        f"严禁编造未来日期的事件！不确定具体日期的事件，event_date 填大致日期但不得晚于 {today_str}。"
+        f"如果 {year} 年尚未发生你训练数据中的重大事件，请诚实地说你无法生成，不要编造。"
+    )
     prompt = SYSTEM_PROMPT.replace("{year}", str(year))
     try:
         result = await asyncio.to_thread(chat_json, prompt, user_message, "deepseek-chat", 0.2, 16384)
@@ -93,8 +100,10 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
     )
     existing_titles = set(existing_result.scalars().all())
 
+    today = date.today()
     added = 0
     skipped = 0
+    future_rejected = 0
     for ev in events:
         title = ev.get("title", "").strip()
         if not title:
@@ -107,6 +116,11 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
             event_date = date.fromisoformat(ev.get("event_date", f"{year}-01-01"))
         except (ValueError, TypeError):
             event_date = date(year, 1, 1)
+
+        # Reject events with future dates (LLM hallucination guard)
+        if event_date > today:
+            future_rejected += 1
+            continue
 
         event = CurrentEvent(
             title=title,
@@ -124,7 +138,7 @@ async def generate_events(db: Any, year: int | None = None) -> dict:
     await db.commit()
 
     logger.info(
-        "Event generation complete: generated=%d added=%d skipped=%d",
-        len(events), added, skipped,
+        "Event generation complete: generated=%d added=%d skipped=%d future_rejected=%d",
+        len(events), added, skipped, future_rejected,
     )
     return {"generated": len(events), "added": added, "skipped": skipped}
