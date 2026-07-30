@@ -9,3 +9,8 @@ dist/
 *.db
 
 difficulty_cache.json
+.scrapy/
+crawler/.scrapy/
+
+celerybeat-schedule
+knowledge_materials/policy/*.html
